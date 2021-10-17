@@ -2,10 +2,13 @@ use crate::collections::seq::Seq;
 use crate::iterator::RbTreeIterator;
 use crate::rbtree::RbTree;
 use crate::AsHashTree;
-use serde::de::{EnumAccess, Error, MapAccess, SeqAccess, Visitor};
+use candid::types::{Compound, Field, Label, Type};
+use candid::CandidType;
+use serde::de::{MapAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::Formatter;
+use std::fmt::{self, Debug, Formatter};
+use std::iter::FromIterator;
 use std::marker::PhantomData;
 
 #[derive(Default)]
@@ -157,7 +160,58 @@ where
     }
 }
 
-// TODO(qti3e) Candid support
+impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> CandidType for Map<K, V>
+where
+    K: CandidType,
+    V: CandidType,
+{
+    fn _ty() -> Type {
+        let tuple = Type::Record(vec![
+            Field {
+                id: Label::Id(0),
+                ty: K::ty(),
+            },
+            Field {
+                id: Label::Id(1),
+                ty: V::ty(),
+            },
+        ]);
+        Type::Vec(Box::new(tuple))
+    }
+
+    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
+    where
+        S: candid::types::Serializer,
+    {
+        let mut ser = serializer.serialize_vec(self.len())?;
+        for e in self.iter() {
+            Compound::serialize_element(&mut ser, &e)?;
+        }
+        Ok(())
+    }
+}
+
+impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> FromIterator<(K, V)> for Map<K, V> {
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
+        let mut result = Map::new();
+
+        for (key, value) in iter {
+            result.insert(key, value);
+        }
+
+        result
+    }
+}
+
+impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Debug for Map<K, V>
+where
+    K: Debug,
+    V: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
+    }
+}
 
 #[cfg(test)]
 mod tests {
