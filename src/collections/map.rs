@@ -69,6 +69,12 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
         self.inner.entry(key)
     }
 
+    /// Returns a mutable reference to the value corresponding to the key.
+    #[inline]
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        self.inner.modify(key.as_ref(), |v| v)
+    }
+
     /// Return the value associated with the given key.
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
