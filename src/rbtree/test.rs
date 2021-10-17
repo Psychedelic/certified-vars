@@ -3,7 +3,7 @@ use crate::{AsHashTree, HashTree};
 use std::convert::AsRef;
 
 fn insert(t: &mut RbTree<Vec<u8>, Vec<u8>>, k: impl AsRef<[u8]>, v: impl AsRef<[u8]>) {
-    t.insert(k.as_ref().to_vec(), v.as_ref().to_vec())
+    t.insert(k.as_ref().to_vec(), v.as_ref().to_vec());
 }
 
 fn get_labels<'a>(ht: &HashTree<'a>) -> Vec<&'a [u8]> {
@@ -262,7 +262,9 @@ fn test_nested_witness() {
         other => panic!("expected a labeled tree, got {:?}", other),
     }
 
-    rb.modify(b"top", |m| m.delete(b"bottom"));
+    rb.modify(b"top", |m| {
+        m.delete(b"bottom");
+    });
     let ht = rb.nested_witness(&b"top"[..], |v| v.witness(&b"bottom"[..]));
     assert_eq!(ht.reconstruct(), rb.root_hash());
 }

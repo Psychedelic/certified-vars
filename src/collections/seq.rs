@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::borrow::Borrow;
 use std::iter::FromIterator;
 use std::ops::Index;
-use std::slice::SliceIndex;
+use std::slice::{Iter, SliceIndex};
 
 /// An append only list.
 #[derive(Default, Eq, PartialEq, Clone, Debug)]
@@ -94,6 +94,12 @@ impl<T: AsHashTree> Seq<T> {
     #[inline]
     pub fn capacity(&self) -> usize {
         self.items.capacity()
+    }
+
+    /// Returns an iterator over the data.
+    #[inline]
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.items.iter()
     }
 
     /// Recompute the hash of the sequence.

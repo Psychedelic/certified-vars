@@ -1,6 +1,7 @@
 mod as_hash_tree;
 pub mod collections;
 pub mod hashtree;
+pub mod iterator;
 pub mod rbtree;
 
 pub use as_hash_tree::*;
