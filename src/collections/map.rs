@@ -1,5 +1,6 @@
 use crate::collections::seq::Seq;
-use crate::iterator::RbTreeIterator;
+use crate::rbtree::entry::Entry;
+use crate::rbtree::iterator::RbTreeIterator;
 use crate::rbtree::RbTree;
 use crate::AsHashTree;
 use candid::types::{Compound, Field, Label, Type};
@@ -47,14 +48,25 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     /// key will be returned.
     #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.inner.insert(key, value)
+        self.inner.insert(key, value).0
     }
 
     /// Remove the value associated with the given key from the map, returns the
     /// previous value associated with the key.
     #[inline]
     pub fn remove(&mut self, key: &K) -> Option<V> {
+        self.inner.delete(key.as_ref()).map(|(_, v)| v)
+    }
+
+    /// Remove an entry from the map and return the key and value.
+    #[inline]
+    pub fn remove_entry(&mut self, key: &K) -> Option<(K, V)> {
         self.inner.delete(key.as_ref())
+    }
+
+    #[inline]
+    pub fn entry(&mut self, key: K) -> Entry<K, V> {
+        self.inner.entry(key)
     }
 
     /// Return the value associated with the given key.

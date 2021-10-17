@@ -5,16 +5,20 @@
 //! and does only provide basic functionalities. Instead we advise you to look at the
 //! [crate::collections] module.
 
+use std::cmp::Ordering::{Equal, Greater, Less};
+use std::fmt;
+
 use crate::hashtree::{
     fork, fork_hash, labeled, labeled_hash, Hash,
     HashTree::{self, Empty, Pruned},
 };
 use crate::AsHashTree;
-use std::cmp::Ordering::{Equal, Greater, Less};
-use std::fmt;
 
 #[cfg(test)]
 pub(crate) mod debug_alloc;
+
+pub mod entry;
+pub mod iterator;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Color {
@@ -66,11 +70,11 @@ impl<'a> AsRef<[u8]> for KeyBound<'a> {
 // 2. Children of a red node are black.
 // 3. Every path from a node goes through the same number of black
 //    nodes.
-pub(crate) struct Node<K, V> {
-    pub key: K,
-    pub value: V,
-    pub left: *mut Node<K, V>,
-    pub right: *mut Node<K, V>,
+struct Node<K, V> {
+    key: K,
+    value: V,
+    left: *mut Node<K, V>,
+    right: *mut Node<K, V>,
     color: Color,
 
     /// Hash of the full hash tree built from this node and its
@@ -160,7 +164,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Node<K, V> {
         )
     }
 
-    unsafe fn delete(n: *mut Self) -> Option<V> {
+    unsafe fn delete(n: *mut Self) -> Option<(K, V)> {
         if n.is_null() {
             return None;
         }
@@ -171,7 +175,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Node<K, V> {
         #[cfg(test)]
         debug_alloc::mark_pointer_deleted(n);
 
-        Some(node.value)
+        Some((node.key, node.value))
     }
 
     unsafe fn subtree_hash(n: *mut Self) -> Hash {
@@ -197,7 +201,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Node<K, V> {
 /// https://www.cs.princeton.edu/~rs/talks/LLRB/LLRB.pdf
 pub struct RbTree<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> {
     len: usize,
-    pub(crate) root: *mut Node<K, V>,
+    root: *mut Node<K, V>,
 }
 
 impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Drop for RbTree<K, V> {
@@ -233,6 +237,20 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
         self.root.is_null()
     }
 
+    pub fn entry(&mut self, key: K) -> entry::Entry<K, V> {
+        let node = unsafe { self.get_node(key.as_ref()) };
+
+        if node.is_null() {
+            entry::Entry::Vacant(entry::VacantEntry { map: self, key })
+        } else {
+            entry::Entry::Occupied(entry::OccupiedEntry {
+                map: self,
+                key,
+                node,
+            })
+        }
+    }
+
     #[inline]
     pub fn get(&self, key: &[u8]) -> Option<&V> {
         unsafe {
@@ -248,30 +266,46 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
         }
     }
 
+    #[inline]
+    unsafe fn get_node(&self, key: &[u8]) -> *mut Node<K, V> {
+        let mut root = self.root;
+        while !root.is_null() {
+            match key.cmp((*root).key.as_ref()) {
+                Equal => return root,
+                Less => root = (*root).left,
+                Greater => root = (*root).right,
+            }
+        }
+        Node::null()
+    }
+
     /// Updates the value corresponding to the specified key.
     #[inline]
-    pub fn modify(&mut self, key: &[u8], f: impl FnOnce(&mut V)) {
-        unsafe fn go<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static>(
+    pub fn modify<T>(&mut self, key: &[u8], f: impl FnOnce(&mut V) -> T) -> Option<T> {
+        unsafe fn go<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static, T>(
             mut h: *mut Node<K, V>,
             k: &[u8],
-            f: impl FnOnce(&mut V),
-        ) {
+            f: impl FnOnce(&mut V) -> T,
+        ) -> Option<T> {
             if h.is_null() {
-                return;
+                return None;
             }
 
             match k.as_ref().cmp((*h).key.as_ref()) {
                 Equal => {
-                    f(&mut (*h).value);
+                    let res = f(&mut (*h).value);
                     (*h).subtree_hash = Node::subtree_hash(h);
+                    Some(res)
                 }
                 Less => {
-                    go((*h).left, k, f);
+                    let res = go((*h).left, k, f);
                     (*h).subtree_hash = Node::subtree_hash(h);
+                    res
                 }
                 Greater => {
-                    go((*h).right, k, f);
+                    let res = go((*h).right, k, f);
                     (*h).subtree_hash = Node::subtree_hash(h);
+                    res
                 }
             }
         }
@@ -633,60 +667,79 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
 
     /// Inserts a key-value entry into the map.
     #[inline]
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    pub fn insert(&mut self, key: K, value: V) -> (Option<V>, &mut V) {
+        struct GoResult<'a, K, V> {
+            node: *mut Node<K, V>,
+            old_value: Option<V>,
+            new_value_ref: &'a mut V,
+        }
+
         unsafe fn go<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static>(
             mut h: *mut Node<K, V>,
-            result: &mut Option<V>,
             k: K,
             mut v: V,
-        ) -> *mut Node<K, V> {
+        ) -> GoResult<'static, K, V> {
             if h.is_null() {
-                return Node::new(k, v);
+                let node = Node::new(k, v);
+                return GoResult {
+                    node,
+                    old_value: None,
+                    new_value_ref: &mut (*node).value,
+                };
             }
 
-            match k.as_ref().cmp((*h).key.as_ref()) {
+            let (old_value, new_value_ref) = match k.as_ref().cmp((*h).key.as_ref()) {
                 Equal => {
                     std::mem::swap(&mut (*h).value, &mut v);
-                    result.insert(v);
                     (*h).subtree_hash = Node::subtree_hash(h);
+                    (Some(v), &mut (*h).value)
                 }
                 Less => {
-                    (*h).left = go((*h).left, result, k, v);
+                    let res = go((*h).left, k, v);
+                    (*h).left = res.node;
                     (*h).subtree_hash = Node::subtree_hash(h);
+                    (res.old_value, res.new_value_ref)
                 }
                 Greater => {
-                    (*h).right = go((*h).right, result, k, v);
+                    let res = go((*h).right, k, v);
+                    (*h).right = res.node;
                     (*h).subtree_hash = Node::subtree_hash(h);
+                    (res.old_value, res.new_value_ref)
                 }
+            };
+
+            GoResult {
+                node: balance(h),
+                old_value,
+                new_value_ref,
             }
-            balance(h)
         }
+
         unsafe {
-            let mut result = None;
-            let mut root = go(self.root, &mut result, key, value);
-            (*root).color = Color::Black;
+            let mut result = go(self.root, key, value);
+            (*result.node).color = Color::Black;
 
             #[cfg(test)]
             debug_assert!(
-                is_balanced(root),
+                is_balanced(root.node),
                 "the tree is not balanced:\n{:?}",
-                DebugView(root)
+                DebugView(root.node)
             );
             #[cfg(test)]
-            debug_assert!(!has_dangling_pointers(root));
+            debug_assert!(!has_dangling_pointers(result.node));
 
-            if result.is_none() {
+            if result.old_value.is_none() {
                 self.len += 1;
             }
 
-            self.root = root;
-            result
+            self.root = result.node;
+            (result.old_value, result.new_value_ref)
         }
     }
 
     /// Removes the specified key from the map.
     #[inline]
-    pub fn delete(&mut self, key: &[u8]) -> Option<V> {
+    pub fn delete(&mut self, key: &[u8]) -> Option<(K, V)> {
         unsafe fn move_red_left<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static>(
             mut h: *mut Node<K, V>,
         ) -> *mut Node<K, V> {
@@ -722,7 +775,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
 
         unsafe fn delete_min<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static>(
             mut h: *mut Node<K, V>,
-            result: &mut Option<V>,
+            result: &mut Option<(K, V)>,
         ) -> *mut Node<K, V> {
             if (*h).left.is_null() {
                 debug_assert!((*h).right.is_null());
@@ -739,7 +792,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
 
         unsafe fn go<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static>(
             mut h: *mut Node<K, V>,
-            result: &mut Option<V>,
+            result: &mut Option<(K, V)>,
             key: &[u8],
         ) -> *mut Node<K, V> {
             if key < (*h).key.as_ref() {

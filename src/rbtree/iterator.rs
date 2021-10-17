@@ -1,4 +1,4 @@
-use crate::rbtree::{Node, RbTree};
+use super::{Node, RbTree};
 use crate::AsHashTree;
 use std::marker::PhantomData;
 
