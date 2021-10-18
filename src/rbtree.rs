@@ -281,11 +281,11 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
 
     /// Updates the value corresponding to the specified key.
     #[inline]
-    pub fn modify<T>(&mut self, key: &[u8], f: impl FnOnce(&mut V) -> T) -> Option<T> {
-        unsafe fn go<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static, T>(
+    pub fn modify<'a, T>(&mut self, key: &[u8], f: impl FnOnce(&'a mut V) -> T) -> Option<T> {
+        unsafe fn go<'a, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static, T>(
             mut h: *mut Node<K, V>,
             k: &[u8],
-            f: impl FnOnce(&mut V) -> T,
+            f: impl FnOnce(&'a mut V) -> T,
         ) -> Option<T> {
             if h.is_null() {
                 return None;
@@ -721,9 +721,9 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTree<K, V> {
 
             #[cfg(test)]
             debug_assert!(
-                is_balanced(root.node),
+                is_balanced(result.node),
                 "the tree is not balanced:\n{:?}",
-                DebugView(root.node)
+                DebugView(result.node)
             );
             #[cfg(test)]
             debug_assert!(!has_dangling_pointers(result.node));

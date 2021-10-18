@@ -2,7 +2,7 @@ use crate::collections::seq::Seq;
 use crate::rbtree::entry::Entry;
 use crate::rbtree::iterator::RbTreeIterator;
 use crate::rbtree::RbTree;
-use crate::AsHashTree;
+use crate::{AsHashTree, Hash, HashTree};
 use candid::types::{Compound, Field, Label, Type};
 use candid::CandidType;
 use serde::de::{MapAccess, Visitor};
@@ -85,6 +85,11 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     #[inline]
     pub fn iter(&self) -> RbTreeIterator<K, V> {
         RbTreeIterator::new(&self.inner)
+    }
+
+    #[inline]
+    pub fn witness(&self, key: &K) -> HashTree {
+        self.inner.witness(key.as_ref())
     }
 }
 
@@ -228,6 +233,18 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
+    }
+}
+
+impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> AsHashTree for Map<K, V> {
+    #[inline]
+    fn root_hash(&self) -> Hash {
+        self.inner.root_hash()
+    }
+
+    #[inline]
+    fn as_hash_tree(&self) -> HashTree<'_> {
+        self.inner.as_hash_tree()
     }
 }
 
