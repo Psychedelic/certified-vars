@@ -17,7 +17,7 @@ pub struct ForkInner<'a>(pub HashTree<'a>, pub HashTree<'a>);
 pub enum HashTree<'a> {
     Empty,
     Fork(Box<ForkInner<'a>>),
-    Labeled(&'a [u8], Box<HashTree<'a>>),
+    Labeled(Cow<'a, [u8]>, Box<HashTree<'a>>),
     Leaf(Cow<'a, [u8]>),
     Pruned(Hash),
 }
@@ -27,7 +27,7 @@ pub fn fork<'a>(l: HashTree<'a>, r: HashTree<'a>) -> HashTree<'a> {
 }
 
 pub fn labeled<'a>(l: &'a [u8], t: HashTree<'a>) -> HashTree<'a> {
-    HashTree::Labeled(l, Box::new(t))
+    HashTree::Labeled(Cow::Borrowed(l), Box::new(t))
 }
 
 pub fn fork_hash(l: &Hash, r: &Hash) -> Hash {

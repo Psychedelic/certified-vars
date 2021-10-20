@@ -1,10 +1,9 @@
 use crate::hashtree::HashTree::Pruned;
-use crate::hashtree::{fork_hash, labeled_hash, leaf_hash, ForkInner};
-use crate::{AsHashTree, Hash, HashTree, Map};
+use crate::hashtree::{fork_hash, labeled_hash, ForkInner};
+use crate::{AsHashTree, Hash, HashTree};
 use std::any::{Any, TypeId};
-use std::cmp::max;
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::Path;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 
 pub mod builder;
 
@@ -39,7 +38,6 @@ struct GroupNode {
 
 #[derive(Debug)]
 enum GroupNodeInner {
-    Empty,
     Fork(Box<GroupNode>, Box<GroupNode>),
     Labeled(String, Box<GroupNode>),
     Leaf(TypeId),
@@ -123,10 +121,6 @@ impl GroupNode {
                 self.id = id;
                 next_id
             }
-            _ => {
-                self.id = id;
-                id + 1
-            }
         }
     }
 
@@ -136,7 +130,6 @@ impl GroupNode {
         }
 
         match &self.data {
-            GroupNodeInner::Empty => HashTree::Empty,
             GroupNodeInner::Fork(left, right) => {
                 let l_tree = left.witness(ray);
                 let r_tree = right.witness(ray);
@@ -144,7 +137,7 @@ impl GroupNode {
             }
             GroupNodeInner::Labeled(label, n) => {
                 let tree = n.witness(ray);
-                HashTree::Labeled(label.as_bytes(), Box::new(tree))
+                HashTree::Labeled(Cow::Borrowed(label.as_bytes()), Box::new(tree))
             }
             GroupNodeInner::Leaf(tid) => ray.leaves.remove(tid).unwrap(),
         }
@@ -152,7 +145,6 @@ impl GroupNode {
 
     fn witness_all<'a>(&'a self, group: &'a Group) -> HashTree<'a> {
         match &self.data {
-            GroupNodeInner::Empty => HashTree::Empty,
             GroupNodeInner::Fork(left, right) => {
                 let l_tree = left.witness_all(group);
                 let r_tree = right.witness_all(group);
@@ -160,7 +152,7 @@ impl GroupNode {
             }
             GroupNodeInner::Labeled(label, n) => {
                 let tree = n.witness_all(group);
-                HashTree::Labeled(label.as_bytes(), Box::new(tree))
+                HashTree::Labeled(Cow::Borrowed(label.as_bytes()), Box::new(tree))
             }
             GroupNodeInner::Leaf(tid) => group.data.get(tid).unwrap().as_hash_tree(),
         }
@@ -168,7 +160,6 @@ impl GroupNode {
 
     fn root_hash(&self, group: &Group) -> Hash {
         match &self.data {
-            GroupNodeInner::Empty => HashTree::Empty.reconstruct(),
             GroupNodeInner::Fork(left, right) => {
                 fork_hash(&left.root_hash(group), &right.root_hash(group))
             }
@@ -264,6 +255,7 @@ impl AsHashTree for Group {
 
 #[test]
 fn xxx() {
+    use crate::Map;
     let mut map = Map::<String, i8>::new();
     map.insert("X".to_string(), 17);
 
@@ -277,6 +269,7 @@ fn xxx() {
 
 #[test]
 fn yyy() {
+    use crate::Map;
     type StringToI8Map = Map<String, i8>;
     let mut map = StringToI8Map::new();
     map.insert("X".to_string(), 17);

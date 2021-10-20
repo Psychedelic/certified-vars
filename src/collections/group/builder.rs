@@ -1,5 +1,4 @@
 use super::{Group, GroupLeaf, GroupNode, GroupNodeInner};
-use crate::Map;
 use std::any::{type_name, TypeId};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
@@ -95,7 +94,7 @@ impl GroupBuilderNode {
 
     pub fn build(self) -> GroupNode {
         match self {
-            GroupBuilderNode::Directory { mut children } => {
+            GroupBuilderNode::Directory { children } => {
                 let mut children = children
                     .into_iter()
                     .map(|(k, v)| GroupNode {
@@ -133,17 +132,4 @@ impl GroupBuilderNode {
             },
         }
     }
-}
-
-#[test]
-fn xxx() {
-    let map = Map::<String, i8>::new();
-    let mut group = GroupBuilder::new()
-        .insert(["a", "x"], map)
-        .insert(["a", "y"], 17u8)
-        .insert(["a", "z"], 32u32)
-        .build();
-
-    println!("{:#?}", group.root);
-    println!("{:?}", group.get_mut::<u8>());
 }
