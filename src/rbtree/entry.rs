@@ -9,24 +9,24 @@ use Entry::{Occupied, Vacant};
 /// This `enum` is constructed from the [`entry`] method on [`RbTree`].
 ///
 /// [`entry`]: RbTree::entry
-pub enum Entry<'a, K: Label + 'a, V: AsHashTree + 'a> {
+pub enum Entry<'a, K: 'static + Label, V: AsHashTree + 'static> {
     Vacant(VacantEntry<'a, K, V>),
     Occupied(OccupiedEntry<'a, K, V>),
 }
 
 /// A view into a vacant entry in a [`RbTree`]. It is part of the [`Entry`] enum.
-pub struct VacantEntry<'a, K: Label + 'a, V: AsHashTree + 'a> {
+pub struct VacantEntry<'a, K: 'static + Label, V: AsHashTree + 'static> {
     pub(super) map: &'a mut RbTree<K, V>,
     pub(super) key: K,
 }
 
-pub struct OccupiedEntry<'a, K: Label + 'a, V: AsHashTree + 'a> {
+pub struct OccupiedEntry<'a, K: 'static + Label, V: AsHashTree + 'static> {
     pub(super) map: &'a mut RbTree<K, V>,
     pub(super) key: K,
     pub(super) node: *mut Node<K, V>,
 }
 
-impl<'a, K: Label, V: AsHashTree> VacantEntry<'a, K, V> {
+impl<'a, K: 'static + Label, V: AsHashTree + 'static> VacantEntry<'a, K, V> {
     /// Sets the value of the entry with the VacantEntry’s key, and returns a mutable
     /// reference to it.
     #[inline]
@@ -48,7 +48,7 @@ impl<'a, K: Label, V: AsHashTree> VacantEntry<'a, K, V> {
     }
 }
 
-impl<'a, K: Label, V: AsHashTree> OccupiedEntry<'a, K, V> {
+impl<'a, K: 'static + Label, V: AsHashTree + 'static> OccupiedEntry<'a, K, V> {
     /// Gets a reference to the value in the entry.
     #[inline]
     pub fn get(&self) -> &V {
@@ -85,17 +85,17 @@ impl<'a, K: Label, V: AsHashTree> OccupiedEntry<'a, K, V> {
     /// Takes the value of the entry out of the map, and returns it.
     #[inline]
     pub fn remove(self) -> V {
-        self.map.delete(self.key.as_ref()).unwrap().1
+        self.map.delete(&self.key).unwrap().1
     }
 
     /// Take ownership of the key and value from the map.
     #[inline]
     pub fn remove_entry(self) -> (K, V) {
-        self.map.delete(self.key.as_ref()).unwrap()
+        self.map.delete(&self.key).unwrap()
     }
 }
 
-impl<'a, K: Label, V: AsHashTree> Entry<'a, K, V> {
+impl<'a, K: 'static + Label, V: AsHashTree + 'static> Entry<'a, K, V> {
     /// Provides in-place mutable access to an occupied entry before any
     /// potential inserts into the map.
     #[inline]
@@ -172,7 +172,7 @@ impl<'a, K: Label, V: AsHashTree> Entry<'a, K, V> {
     }
 }
 
-impl<'a, K: Label, V: AsHashTree> Debug for Entry<'a, K, V>
+impl<'a, K: 'static + Label, V: AsHashTree + 'static> Debug for Entry<'a, K, V>
 where
     K: Debug,
     V: Debug,
@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<'a, K: Label, V: AsHashTree> Debug for VacantEntry<'a, K, V>
+impl<'a, K: 'static + Label, V: AsHashTree + 'static> Debug for VacantEntry<'a, K, V>
 where
     K: Debug,
     V: Debug,
@@ -195,7 +195,7 @@ where
     }
 }
 
-impl<'a, K: Label, V: AsHashTree> Debug for OccupiedEntry<'a, K, V>
+impl<'a, K: 'static + Label, V: AsHashTree + 'static> Debug for OccupiedEntry<'a, K, V>
 where
     K: Debug,
     V: Debug,

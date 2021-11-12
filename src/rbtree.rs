@@ -20,7 +20,7 @@ use crate::AsHashTree;
 #[cfg(test)]
 pub(crate) mod debug_alloc;
 
-// pub mod entry;
+pub mod entry;
 // pub mod iterator;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -282,19 +282,19 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         self.root.is_null()
     }
 
-    // pub fn entry(&mut self, key: K) -> entry::Entry<K, V> {
-    //     let node = unsafe { self.get_node(&key) };
-    //
-    //     if node.is_null() {
-    //         entry::Entry::Vacant(entry::VacantEntry { map: self, key })
-    //     } else {
-    //         entry::Entry::Occupied(entry::OccupiedEntry {
-    //             map: self,
-    //             key,
-    //             node,
-    //         })
-    //     }
-    // }
+    pub fn entry(&mut self, key: K) -> entry::Entry<K, V> {
+        let node = unsafe { self.get_node(&key) };
+
+        if node.is_null() {
+            entry::Entry::Vacant(entry::VacantEntry { map: self, key })
+        } else {
+            entry::Entry::Occupied(entry::OccupiedEntry {
+                map: self,
+                key,
+                node,
+            })
+        }
+    }
 
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
