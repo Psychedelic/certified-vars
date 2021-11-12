@@ -20,7 +20,7 @@ use std::slice::{Iter, SliceIndex};
 /// seq.append(0);
 /// seq.append(1);
 ///
-/// assert!(seq.len(), 2);
+/// assert_eq!(seq.len(), 2);
 /// ```
 #[derive(Default, Eq, PartialEq, Clone, Debug)]
 pub struct Seq<T> {
@@ -284,6 +284,7 @@ impl<T: CandidType> CandidType for Seq<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use candid::{decode_one, encode_one};
 
     #[test]
     fn append() {
@@ -351,16 +352,38 @@ mod tests {
 
     #[test]
     fn index() {
-        todo!()
+        let seq = (0..100).collect::<Seq<_>>();
+
+        for i in 0..100 {
+            assert_eq!(seq[i], i);
+        }
     }
 
     #[test]
-    fn serde() {
-        todo!()
+    #[should_panic]
+    fn index_out_of_range() {
+        let seq = Seq::<u8>::new();
+        seq[0];
+    }
+
+    #[test]
+    fn serde_cbor() {
+        let seq = (0..10).collect::<Seq<_>>();
+        let serialized = serde_cbor::to_vec(&seq).unwrap();
+        let actual: Seq<i32> = serde_cbor::from_slice(&serialized).unwrap();
+        assert_eq!(actual.len(), 10);
+        assert_eq!(actual.hash, seq.hash);
+        assert_eq!(actual, seq);
+        let expected = (0..10).collect::<Vec<_>>();
+        let deserialized_as_vec: Vec<i32> = serde_cbor::from_slice(&serialized).unwrap();
+        assert_eq!(deserialized_as_vec, expected);
     }
 
     #[test]
     fn candid() {
-        todo!()
+        let seq = (0..10).collect::<Seq<_>>();
+        let encoded = encode_one(&seq).unwrap();
+        let decoded: Seq<i32> = decode_one(&encoded).unwrap();
+        assert_eq!(seq, decoded);
     }
 }

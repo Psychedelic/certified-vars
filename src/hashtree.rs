@@ -11,6 +11,16 @@ pub type Hash = [u8; 32];
 #[derive(Debug, Eq, PartialEq)]
 pub struct ForkInner<'a>(pub HashTree<'a>, pub HashTree<'a>);
 
+impl<'a> ForkInner<'a> {
+    pub fn left(&self) -> &HashTree<'a> {
+        &self.0
+    }
+
+    pub fn right(&self) -> &HashTree<'a> {
+        &self.0
+    }
+}
+
 /// HashTree as defined in the interfaces spec.
 /// https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate
 #[derive(Debug, Eq, PartialEq)]
@@ -50,7 +60,7 @@ pub fn labeled_hash(label: &[u8], content_hash: &Hash) -> Hash {
     h.finalize().into()
 }
 
-impl HashTree<'_> {
+impl<'a> HashTree<'a> {
     pub fn reconstruct(&self) -> Hash {
         match self {
             Self::Empty => domain_sep("ic-hashtree-empty").finalize().into(),
@@ -62,6 +72,53 @@ impl HashTree<'_> {
             Self::Leaf(data) => leaf_hash(data),
             Self::Pruned(h) => *h,
         }
+    }
+
+    /// Collect and return all of the labels in this HashTree.
+    ///
+    /// This method is intended for testing purposes.
+    pub fn get_labels<'b: 'a>(&'b self) -> Vec<&'b [u8]> {
+        fn go<'a>(keys: &mut Vec<&'a [u8]>, tree: &'a HashTree<'a>) {
+            match tree {
+                HashTree::Labeled(key, _) => {
+                    keys.push(key);
+                }
+                HashTree::Fork(lr) => {
+                    go(keys, lr.left());
+                    go(keys, lr.right());
+                }
+                _ => (),
+            }
+        }
+
+        let mut keys = Vec::new();
+        go(&mut keys, self);
+        keys
+    }
+
+    /// Collect and return all of the values in this HashTree.
+    ///
+    /// This method is intended for testing purposes.
+    pub fn get_leaf_values<'b: 'a>(&'b self) -> Vec<&'b [u8]> {
+        fn go<'a>(values: &mut Vec<&'a [u8]>, tree: &'a HashTree<'a>) {
+            match tree {
+                HashTree::Leaf(value) => {
+                    values.push(value);
+                }
+                HashTree::Fork(lr) => {
+                    go(values, lr.left());
+                    go(values, lr.right());
+                }
+                HashTree::Labeled(_, t) => {
+                    go(values, &*t);
+                }
+                _ => (),
+            }
+        }
+
+        let mut values = Vec::new();
+        go(&mut values, self);
+        values
     }
 }
 
