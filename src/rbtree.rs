@@ -21,7 +21,7 @@ use crate::AsHashTree;
 pub(crate) mod debug_alloc;
 
 pub mod entry;
-// pub mod iterator;
+pub mod iterator;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Color {
@@ -820,7 +820,7 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         ) -> *mut Node<K, V> {
             if (*h).left.is_null() {
                 debug_assert!((*h).right.is_null());
-                result.insert(Node::delete(h).unwrap());
+                *result = Some(Node::delete(h).unwrap());
                 return Node::null();
             }
             if !is_red((*h).left) && !is_red((*(*h).left).left) {
@@ -847,7 +847,7 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
                 }
                 if key == &(*h).key && (*h).right.is_null() {
                     debug_assert!((*h).left.is_null());
-                    result.insert(Node::delete(h).unwrap());
+                    *result = Some(Node::delete(h).unwrap());
                     return Node::null();
                 }
 

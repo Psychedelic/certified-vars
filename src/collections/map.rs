@@ -1,9 +1,10 @@
 use crate::collections::seq::Seq;
+use crate::label::Label;
 use crate::rbtree::entry::Entry;
 use crate::rbtree::iterator::RbTreeIterator;
 use crate::rbtree::RbTree;
 use crate::{AsHashTree, Hash, HashTree};
-use candid::types::{Compound, Field, Label, Type};
+use candid::types::{Compound, Field, Label as CLabel, Type};
 use candid::CandidType;
 use serde::de::{MapAccess, Visitor};
 use serde::ser::SerializeMap;
@@ -13,11 +14,11 @@ use std::iter::FromIterator;
 use std::marker::PhantomData;
 
 #[derive(Default)]
-pub struct Map<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> {
+pub struct Map<K: 'static + Label, V: AsHashTree + 'static> {
     inner: RbTree<K, V>,
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
+impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
     #[inline]
     pub fn new() -> Self {
         Self {
@@ -55,13 +56,13 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     /// previous value associated with the key.
     #[inline]
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        self.inner.delete(key.as_ref()).map(|(_, v)| v)
+        self.inner.delete(key).map(|(_, v)| v)
     }
 
     /// Remove an entry from the map and return the key and value.
     #[inline]
     pub fn remove_entry(&mut self, key: &K) -> Option<(K, V)> {
-        self.inner.delete(key.as_ref())
+        self.inner.delete(key)
     }
 
     #[inline]
@@ -72,13 +73,13 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     /// Returns a mutable reference to the value corresponding to the key.
     #[inline]
     pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
-        self.inner.modify(key.as_ref(), |v| v)
+        self.inner.modify(key, |v| v)
     }
 
     /// Return the value associated with the given key.
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.inner.get(key.as_ref())
+        self.inner.get(key)
     }
 
     /// Return an iterator over the key-values in the map.
@@ -90,7 +91,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     /// Create a HashTree witness for the value associated with given key.
     #[inline]
     pub fn witness(&self, key: &K) -> HashTree {
-        self.inner.witness(key.as_ref())
+        self.inner.witness(key)
     }
 
     /// Returns a witness enumerating all the keys in this map.  The
@@ -104,7 +105,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     /// The resulting tree contains both keys and values.
     #[inline]
     pub fn witness_value_range(&self, first: &K, last: &K) -> HashTree<'_> {
-        self.inner.value_range(first.as_ref(), last.as_ref())
+        self.inner.value_range(first, last)
     }
 
     /// Return the underlying [`RbTree`] for this map.
@@ -114,13 +115,13 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
     }
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree> Map<K, Seq<V>> {
+impl<K: 'static + Label, V: AsHashTree> Map<K, Seq<V>> {
     /// Perform a [`Seq::append`] on the seq associated with the give value, if
     /// the seq does not exists, creates an empty one and inserts it to the map.
     pub fn append_deep(&mut self, key: K, value: V) {
         let mut value = Some(value);
 
-        self.inner.modify(key.as_ref(), |seq| {
+        self.inner.modify(&key, |seq| {
             seq.append(value.take().unwrap());
         });
 
@@ -133,14 +134,11 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree> Map<K, Seq<V>> {
 
     #[inline]
     pub fn len_deep(&mut self, key: &K) -> usize {
-        self.inner
-            .get(key.as_ref())
-            .map(|seq| seq.len())
-            .unwrap_or(0)
+        self.inner.get(key).map(|seq| seq.len()).unwrap_or(0)
     }
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Serialize for Map<K, V>
+impl<K: 'static + Label, V: AsHashTree + 'static> Serialize for Map<K, V>
 where
     K: Serialize,
     V: Serialize,
@@ -159,7 +157,7 @@ where
     }
 }
 
-impl<'de, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Deserialize<'de> for Map<K, V>
+impl<'de, K: 'static + Label, V: AsHashTree + 'static> Deserialize<'de> for Map<K, V>
 where
     K: Deserialize<'de>,
     V: Deserialize<'de>,
@@ -174,7 +172,7 @@ where
 
 struct MapVisitor<K, V>(PhantomData<(K, V)>);
 
-impl<'de, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Visitor<'de> for MapVisitor<K, V>
+impl<'de, K: 'static + Label, V: AsHashTree + 'static> Visitor<'de> for MapVisitor<K, V>
 where
     K: Deserialize<'de>,
     V: Deserialize<'de>,
@@ -204,7 +202,7 @@ where
     }
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> CandidType for Map<K, V>
+impl<K: 'static + Label, V: AsHashTree + 'static> CandidType for Map<K, V>
 where
     K: CandidType,
     V: CandidType,
@@ -212,11 +210,11 @@ where
     fn _ty() -> Type {
         let tuple = Type::Record(vec![
             Field {
-                id: Label::Id(0),
+                id: CLabel::Id(0),
                 ty: K::ty(),
             },
             Field {
-                id: Label::Id(1),
+                id: CLabel::Id(1),
                 ty: V::ty(),
             },
         ]);
@@ -235,7 +233,7 @@ where
     }
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> FromIterator<(K, V)> for Map<K, V> {
+impl<K: 'static + Label, V: AsHashTree + 'static> FromIterator<(K, V)> for Map<K, V> {
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
         let mut result = Map::new();
 
@@ -247,7 +245,7 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> FromIterator<(K, V)> for
     }
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Debug for Map<K, V>
+impl<K: 'static + Label, V: AsHashTree + 'static> Debug for Map<K, V>
 where
     K: Debug,
     V: Debug,
@@ -257,7 +255,7 @@ where
     }
 }
 
-impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> AsHashTree for Map<K, V> {
+impl<K: 'static + Label, V: AsHashTree + 'static> AsHashTree for Map<K, V> {
     #[inline]
     fn root_hash(&self) -> Hash {
         self.inner.root_hash()

@@ -1,16 +1,17 @@
 use super::{Node, RbTree};
+use crate::label::Label;
 use crate::AsHashTree;
 use std::marker::PhantomData;
 
 /// An iterator over key-values in a RbTree.
-pub struct RbTreeIterator<'tree, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> {
+pub struct RbTreeIterator<'tree, K: 'static + Label, V: AsHashTree + 'static> {
     visit: *mut Node<K, V>,
     stack: Vec<*mut Node<K, V>>,
     remaining_elements: usize,
     lifetime: PhantomData<&'tree RbTree<K, V>>,
 }
 
-impl<'tree, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTreeIterator<'tree, K, V> {
+impl<'tree, K: 'static + Label, V: AsHashTree + 'static> RbTreeIterator<'tree, K, V> {
     pub fn new(tree: &'tree RbTree<K, V>) -> Self {
         Self {
             visit: tree.root,
@@ -21,9 +22,7 @@ impl<'tree, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> RbTreeIterator<'t
     }
 }
 
-impl<'tree, K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Iterator
-    for RbTreeIterator<'tree, K, V>
-{
+impl<'tree, K: 'static + Label, V: AsHashTree + 'static> Iterator for RbTreeIterator<'tree, K, V> {
     type Item = (&'tree K, &'tree V);
 
     #[inline]
