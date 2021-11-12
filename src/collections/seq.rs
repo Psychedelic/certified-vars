@@ -8,7 +8,20 @@ use std::iter::FromIterator;
 use std::ops::Index;
 use std::slice::{Iter, SliceIndex};
 
-/// An append only list.
+/// An append only list of `T`.
+///
+/// # Example
+///
+/// ```
+/// use certified_vars::Seq;
+///
+/// let mut seq = Seq::<u8>::new();
+///
+/// seq.append(0);
+/// seq.append(1);
+///
+/// assert!(seq.len(), 2);
+/// ```
 #[derive(Default, Eq, PartialEq, Clone, Debug)]
 pub struct Seq<T> {
     hash: Hash,
@@ -270,14 +283,70 @@ impl<T: CandidType> CandidType for Seq<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn append() {
-        todo!()
+        let mut seq = Seq::<usize>::with_capacity(1000);
+        let mut hash = seq.root_hash();
+        assert_eq!(seq.is_empty(), true);
+
+        for i in 0..1000 {
+            seq.append(i);
+            assert_eq!(seq.len(), i + 1);
+            let new_hash = seq.root_hash();
+            assert_ne!(hash, new_hash);
+            hash = new_hash;
+        }
+
+        assert_eq!(seq.is_empty(), false);
+
+        seq.clear();
+        assert_eq!(seq.len(), 0);
+        assert_eq!(seq.is_empty(), true);
+        assert_eq!(seq.root_hash(), Seq::<usize>::new().root_hash());
+
+        for i in 0..1000 {
+            seq.append(i);
+        }
+
+        assert_eq!(hash, seq.root_hash());
     }
 
     #[test]
     fn extend() {
-        todo!()
+        let manual = {
+            let mut seq = Seq::<usize>::with_capacity(100);
+            for i in 0..100 {
+                seq.append(i);
+            }
+            seq
+        };
+
+        {
+            let mut seq = Seq::<usize>::new();
+            seq.extend(0..100);
+
+            assert_eq!(manual.len(), seq.len());
+            assert_eq!(manual.root_hash(), seq.root_hash());
+        }
+
+        {
+            let mut seq = Seq::<usize>::new();
+            seq.extend(0..50);
+            seq.extend(50..100);
+            assert_eq!(manual.len(), seq.len());
+            assert_eq!(manual.root_hash(), seq.root_hash());
+        }
+
+        {
+            let mut seq = Seq::<usize>::new();
+            seq.extend(0..50);
+            seq.append(50);
+            seq.extend(51..100);
+            assert_eq!(manual.len(), seq.len());
+            assert_eq!(manual.root_hash(), seq.root_hash());
+        }
     }
 
     #[test]

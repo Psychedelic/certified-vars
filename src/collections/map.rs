@@ -87,9 +87,30 @@ impl<K: 'static + AsRef<[u8]>, V: AsHashTree + 'static> Map<K, V> {
         RbTreeIterator::new(&self.inner)
     }
 
+    /// Create a HashTree witness for the value associated with given key.
     #[inline]
     pub fn witness(&self, key: &K) -> HashTree {
         self.inner.witness(key.as_ref())
+    }
+
+    /// Returns a witness enumerating all the keys in this map.  The
+    /// resulting tree doesn't include values, they are replaced with
+    /// "Pruned" nodes.
+    pub fn witness_keys(&self) -> HashTree {
+        self.inner.keys()
+    }
+
+    /// Returns a witness for the key-value pairs in the specified range.
+    /// The resulting tree contains both keys and values.
+    #[inline]
+    pub fn witness_value_range(&self, first: &K, last: &K) -> HashTree<'_> {
+        self.inner.value_range(first.as_ref(), last.as_ref())
+    }
+
+    /// Return the underlying [`RbTree`] for this map.
+    #[inline]
+    pub fn as_tree(&self) -> &RbTree<K, V> {
+        &self.inner
     }
 }
 

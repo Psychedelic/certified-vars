@@ -4,6 +4,7 @@ use crate::{AsHashTree, Hash, HashTree};
 use std::any::{Any, TypeId};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 
 pub mod builder;
 

@@ -6,8 +6,8 @@ fn insert(t: &mut RbTree<Vec<u8>, Vec<u8>>, k: impl AsRef<[u8]>, v: impl AsRef<[
     t.insert(k.as_ref().to_vec(), v.as_ref().to_vec());
 }
 
-fn get_labels<'a>(ht: &HashTree<'a>) -> Vec<&'a [u8]> {
-    fn go<'a>(t: &HashTree<'a>, keys: &mut Vec<&'a [u8]>) {
+fn get_labels<'a>(ht: &'a HashTree<'a>) -> Vec<&'a [u8]> {
+    fn go<'a>(t: &'a HashTree<'a>, keys: &mut Vec<&'a [u8]>) {
         match t {
             HashTree::Labeled(key, _) => {
                 keys.push(key);
@@ -251,10 +251,10 @@ fn test_nested_witness() {
     assert_eq!(ht.reconstruct(), rb.root_hash());
     match ht {
         HashTree::Labeled(lt, tt) => {
-            assert_eq!(lt, b"top");
+            assert_eq!(lt.as_ref(), b"top");
             match &(*tt) {
                 HashTree::Labeled(lb, _) => {
-                    assert_eq!(lb, b"bottom");
+                    assert_eq!(lb.as_ref(), b"bottom");
                 }
                 other => panic!("unexpected nested tree: {:?}", other),
             }
