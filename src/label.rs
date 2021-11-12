@@ -22,6 +22,6 @@ impl<T: Ord + AsRef<[u8]>> Label for T {
         if p.len() > x.len() {
             return false;
         }
-        return &x[0..p.len()] == p;
+        &x[0..p.len()] == p
     }
 }

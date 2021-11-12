@@ -869,9 +869,7 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         }
 
         unsafe {
-            if self.get(key).is_none() {
-                return None;
-            }
+            self.get(key)?;
             if !is_red((*self.root).left) && !is_red((*self.root).right) {
                 (*self.root).color = Color::Red;
             }

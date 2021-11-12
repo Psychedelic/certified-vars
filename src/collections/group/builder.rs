@@ -61,6 +61,12 @@ impl GroupBuilder {
     }
 }
 
+impl Default for GroupBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GroupBuilderNode {
     pub fn insert(&mut self, mut path: VecDeque<String>, tid: TypeId) {
         if let GroupBuilderNode::Directory { children } = self {
@@ -70,16 +76,16 @@ impl GroupBuilderNode {
                 let leaf = GroupBuilderNode::Leaf { tid };
 
                 children
-                    .entry(name.clone())
+                    .entry(name)
                     .and_modify(|_| panic!("Path is already used."))
-                    .or_insert(Box::new(leaf));
+                    .or_insert_with(|| Box::new(leaf));
 
                 return;
             }
             let dir_name = path.pop_front().unwrap();
 
             children
-                .entry(dir_name.clone())
+                .entry(dir_name)
                 .or_insert_with(|| {
                     Box::new(GroupBuilderNode::Directory {
                         children: BTreeMap::new(),

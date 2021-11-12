@@ -171,10 +171,10 @@ impl<T: AsHashTree> FromIterator<T> for Seq<T> {
     }
 }
 
-impl<T: AsHashTree> Into<Vec<T>> for Seq<T> {
+impl<T: AsHashTree> From<Seq<T>> for Vec<T> {
     #[inline]
-    fn into(self) -> Vec<T> {
-        self.items
+    fn from(seq: Seq<T>) -> Self {
+        seq.items
     }
 }
 
