@@ -5,7 +5,7 @@
 //! and does only provide basic functionalities. Instead we advise you to look at the
 //! [crate::collections] module.
 
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::fmt;
@@ -14,7 +14,7 @@ use crate::hashtree::{
     fork, fork_hash, labeled_hash, Hash,
     HashTree::{self, Empty, Pruned},
 };
-use crate::label::Label;
+use crate::label::{Label, Prefix};
 use crate::AsHashTree;
 
 #[cfg(test)]
@@ -90,15 +90,6 @@ impl<'a, T: Label> Label for KeyBound<'a, T> {
         match self {
             KeyBound::Exact(key) => key.as_label(),
             KeyBound::Neighbor(key) => key.as_label(),
-        }
-    }
-
-    fn is_prefix_of(&self, other: &Self) -> bool {
-        match (self, other) {
-            (KeyBound::Exact(s), KeyBound::Exact(o)) => s.is_prefix_of(o),
-            (KeyBound::Exact(s), KeyBound::Neighbor(o)) => s.is_prefix_of(o),
-            (KeyBound::Neighbor(s), KeyBound::Exact(o)) => s.is_prefix_of(o),
-            (KeyBound::Neighbor(s), KeyBound::Neighbor(o)) => s.is_prefix_of(o),
         }
     }
 }
@@ -297,11 +288,15 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     }
 
     #[inline]
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         unsafe {
             let mut root = self.root;
             while !root.is_null() {
-                match key.cmp(&(*root).key) {
+                match key.cmp((*root).key.borrow()) {
                     Equal => return Some(&(*root).value),
                     Less => root = (*root).left,
                     Greater => root = (*root).right,
@@ -377,7 +372,7 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     ///
     /// If the key is not in the map, returns a proof of absence.
     #[inline]
-    pub fn witness<'a>(&'a self, key: &K) -> HashTree<'a> {
+    pub fn witness(&self, key: &K) -> HashTree<'_> {
         self.nested_witness(key, |v| v.as_hash_tree())
     }
 
@@ -385,11 +380,15 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     /// construction of the value witness.  This method is useful for
     /// constructing witnesses for nested certified maps.
     #[inline]
-    pub fn nested_witness<'a>(
+    pub fn nested_witness<'a, Q: ?Sized>(
         &'a self,
-        key: &K,
+        key: &Q,
         f: impl FnOnce(&'a V) -> HashTree<'a>,
-    ) -> HashTree<'a> {
+    ) -> HashTree<'a>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         if let Some(t) = self.lookup_and_build_witness(key, f) {
             return t;
         }
@@ -412,7 +411,12 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     /// resulting tree doesn't include values, they are replaced with
     /// "Pruned" nodes.
     #[inline]
-    pub fn key_range(&self, first: &K, last: &K) -> HashTree<'_> {
+    pub fn key_range<Q1: ?Sized, Q2: ?Sized>(&self, first: &Q1, last: &Q2) -> HashTree<'_>
+    where
+        K: Borrow<Q1> + Borrow<Q2>,
+        Q1: Ord,
+        Q2: Ord,
+    {
         self.range_witness(
             self.lower_bound(first),
             self.upper_bound(last),
@@ -423,7 +427,12 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     /// Returns a witness for the key-value pairs in the specified range.
     /// The resulting tree contains both keys and values.
     #[inline]
-    pub fn value_range(&self, first: &K, last: &K) -> HashTree<'_> {
+    pub fn value_range<Q1: ?Sized, Q2: ?Sized>(&self, first: &Q1, last: &Q2) -> HashTree<'_>
+    where
+        K: Borrow<Q1> + Borrow<Q2>,
+        Q1: Ord,
+        Q2: Ord,
+    {
         self.range_witness(
             self.lower_bound(first),
             self.upper_bound(last),
@@ -434,7 +443,11 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     /// Returns a witness that enumerates all the keys starting with
     /// the specified prefix.
     #[inline]
-    pub fn keys_with_prefix(&self, prefix: &K) -> HashTree<'_> {
+    pub fn keys_with_prefix<P: ?Sized>(&self, prefix: &P) -> HashTree<'_>
+    where
+        K: Prefix<P>,
+        P: Ord,
+    {
         self.range_witness(
             self.lower_bound(prefix),
             self.right_prefix_neighbor(prefix),
@@ -612,16 +625,24 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         unsafe { go(self.root, lo, hi, f) }
     }
 
-    fn lower_bound<'a>(&'a self, key: &K) -> Option<KeyBound<'a, K>> {
-        unsafe fn go<'a, K: 'static + Label, V>(
+    fn lower_bound<Q: ?Sized>(&self, key: &Q) -> Option<KeyBound<'_, K>>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
+        unsafe fn go<'a, K: 'static + Label, V, Q: ?Sized>(
             n: *mut Node<K, V>,
-            key: &K,
-        ) -> Option<KeyBound<'a, K>> {
+            key: &Q,
+        ) -> Option<KeyBound<'a, K>>
+        where
+            K: Borrow<Q>,
+            Q: Ord,
+        {
             if n.is_null() {
                 return None;
             }
             let node_key = &(*n).key;
-            match node_key.cmp(key) {
+            match node_key.borrow().cmp(key) {
                 Less => go((*n).right, key).or(Some(KeyBound::Neighbor(node_key))),
                 Equal => Some(KeyBound::Exact(node_key)),
                 Greater => go((*n).left, key),
@@ -630,16 +651,24 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         unsafe { go(self.root, key) }
     }
 
-    fn upper_bound<'a>(&'a self, key: &K) -> Option<KeyBound<'a, K>> {
-        unsafe fn go<'a, K: 'static + Label, V>(
+    fn upper_bound<Q: ?Sized>(&self, key: &Q) -> Option<KeyBound<'_, K>>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
+        unsafe fn go<'a, K: 'static + Label, V, Q: ?Sized>(
             n: *mut Node<K, V>,
-            key: &K,
-        ) -> Option<KeyBound<'a, K>> {
+            key: &Q,
+        ) -> Option<KeyBound<'a, K>>
+        where
+            K: Borrow<Q>,
+            Q: Ord,
+        {
             if n.is_null() {
                 return None;
             }
             let node_key = &(*n).key;
-            match node_key.cmp(key) {
+            match node_key.borrow().cmp(key) {
                 Less => go((*n).right, key),
                 Equal => Some(KeyBound::Exact(node_key)),
                 Greater => go((*n).left, key).or(Some(KeyBound::Neighbor(node_key))),
@@ -648,17 +677,26 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         unsafe { go(self.root, key) }
     }
 
-    fn right_prefix_neighbor<'a>(&'a self, prefix: &K) -> Option<KeyBound<'a, K>> {
-        unsafe fn go<'a, K: 'static + Label, V>(
+    fn right_prefix_neighbor<P: ?Sized>(&self, prefix: &P) -> Option<KeyBound<'_, K>>
+    where
+        K: Prefix<P>,
+        P: Ord,
+    {
+        unsafe fn go<'a, K: 'static + Label, V, P: ?Sized>(
             n: *mut Node<K, V>,
-            prefix: &K,
-        ) -> Option<KeyBound<'a, K>> {
+            prefix: &P,
+        ) -> Option<KeyBound<'a, K>>
+        where
+            K: Prefix<P>,
+            P: Ord,
+        {
             if n.is_null() {
                 return None;
             }
             let node_key = &(*n).key;
-            match node_key.cmp(prefix) {
-                Greater if prefix.is_prefix_of(node_key) => go((*n).right, prefix),
+            let key_prefix = node_key.borrow();
+            match key_prefix.cmp(prefix) {
+                Greater if node_key.is_prefix(prefix) => go((*n).right, prefix),
                 Greater => go((*n).left, prefix).or(Some(KeyBound::Neighbor(node_key))),
                 Less | Equal => go((*n).right, prefix),
             }
@@ -666,20 +704,28 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         unsafe { go(self.root, prefix) }
     }
 
-    fn lookup_and_build_witness<'a>(
+    fn lookup_and_build_witness<'a, Q: ?Sized>(
         &'a self,
-        key: &K,
+        key: &Q,
         f: impl FnOnce(&'a V) -> HashTree<'a>,
-    ) -> Option<HashTree<'a>> {
-        unsafe fn go<'a, K: 'static + Label, V: AsHashTree + 'static>(
+    ) -> Option<HashTree<'a>>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
+        unsafe fn go<'a, K: 'static + Label, V: AsHashTree + 'static, Q: ?Sized>(
             n: *mut Node<K, V>,
-            key: &K,
+            key: &Q,
             f: impl FnOnce(&'a V) -> HashTree<'a>,
-        ) -> Option<HashTree<'a>> {
+        ) -> Option<HashTree<'a>>
+        where
+            K: Borrow<Q>,
+            Q: Ord,
+        {
             if n.is_null() {
                 return None;
             }
-            match key.cmp(&(*n).key) {
+            match key.cmp((*n).key.borrow()) {
                 Equal => Some(three_way_fork(
                     Node::left_hash_tree(n),
                     Node::subtree_with(n, f),
@@ -780,7 +826,11 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
 
     /// Removes the specified key from the map.
     #[inline]
-    pub fn delete(&mut self, key: &K) -> Option<(K, V)> {
+    pub fn delete<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         unsafe fn move_red_left<K: 'static + Label, V: AsHashTree + 'static>(
             mut h: *mut Node<K, V>,
         ) -> *mut Node<K, V> {
@@ -831,12 +881,16 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
             balance(h)
         }
 
-        unsafe fn go<K: 'static + Label, V: AsHashTree + 'static>(
+        unsafe fn go<K: 'static + Label, V: AsHashTree + 'static, Q: ?Sized>(
             mut h: *mut Node<K, V>,
             result: &mut Option<(K, V)>,
-            key: &K,
-        ) -> *mut Node<K, V> {
-            if key < &(*h).key {
+            key: &Q,
+        ) -> *mut Node<K, V>
+        where
+            K: Borrow<Q>,
+            Q: Ord,
+        {
+            if key < (*h).key.borrow() {
                 if !is_red((*h).left) && !is_red((*(*h).left).left) {
                     h = move_red_left(h);
                 }
@@ -845,7 +899,7 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
                 if is_red((*h).left) {
                     h = rotate_right(h);
                 }
-                if key == &(*h).key && (*h).right.is_null() {
+                if key == (*h).key.borrow() && (*h).right.is_null() {
                     debug_assert!((*h).left.is_null());
                     *result = Some(Node::delete(h).unwrap());
                     return Node::null();
@@ -855,7 +909,7 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
                     h = move_red_right(h);
                 }
 
-                if key == &(*h).key {
+                if key == (*h).key.borrow() {
                     let m = min((*h).right);
                     std::mem::swap(&mut (*h).key, &mut (*m).key);
                     std::mem::swap(&mut (*h).value, &mut (*m).value);
