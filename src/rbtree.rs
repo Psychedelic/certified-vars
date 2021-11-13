@@ -103,6 +103,15 @@ impl<'a, T: Label> AsRef<T> for KeyBound<'a, T> {
     }
 }
 
+impl<'a, T: Label + AsRef<[u8]>> AsRef<[u8]> for KeyBound<'a, T> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            KeyBound::Exact(key) => key.as_ref(),
+            KeyBound::Neighbor(key) => key.as_ref(),
+        }
+    }
+}
+
 // 1. All leaves are black.
 // 2. Children of a red node are black.
 // 3. Every path from a node goes through the same number of black
@@ -321,17 +330,25 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
 
     /// Updates the value corresponding to the specified key.
     #[inline]
-    pub fn modify<'a, T>(&mut self, key: &K, f: impl FnOnce(&'a mut V) -> T) -> Option<T> {
-        unsafe fn go<'a, K: 'static + Label, V: AsHashTree + 'static, T>(
+    pub fn modify<'a, Q: ?Sized, T>(&mut self, key: &Q, f: impl FnOnce(&'a mut V) -> T) -> Option<T>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
+        unsafe fn go<'a, K: 'static + Label, V: AsHashTree + 'static, T, Q: ?Sized>(
             mut h: *mut Node<K, V>,
-            k: &K,
+            k: &Q,
             f: impl FnOnce(&'a mut V) -> T,
-        ) -> Option<T> {
+        ) -> Option<T>
+        where
+            K: Borrow<Q>,
+            Q: Ord,
+        {
             if h.is_null() {
                 return None;
             }
 
-            match k.cmp(&(*h).key) {
+            match k.cmp((*h).key.borrow()) {
                 Equal => {
                     let res = f(&mut (*h).value);
                     (*h).subtree_hash = Node::subtree_hash(h);
@@ -372,7 +389,11 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     ///
     /// If the key is not in the map, returns a proof of absence.
     #[inline]
-    pub fn witness(&self, key: &K) -> HashTree<'_> {
+    pub fn witness<Q: ?Sized>(&self, key: &Q) -> HashTree<'_>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.nested_witness(key, |v| v.as_hash_tree())
     }
 
@@ -1099,5 +1120,5 @@ impl<K: Label, V> fmt::Debug for DebugView<K, V> {
     }
 }
 
-// #[cfg(test)]
-// mod test;
+#[cfg(test)]
+mod test;

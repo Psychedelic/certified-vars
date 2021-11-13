@@ -1,3 +1,4 @@
+use candid::Principal;
 use std::borrow::{Borrow, Cow};
 
 /// Any value that can be used as a label in the [`HashTree`] and can be a key
@@ -31,8 +32,93 @@ pub trait Prefix<T: Ord + ?Sized>: Label + Borrow<T> {
     }
 }
 
-impl<T: Ord + AsRef<[u8]>> Label for T {
+impl Label for Vec<u8> {
     fn as_label(&self) -> Cow<[u8]> {
-        Cow::Borrowed(self.as_ref())
+        Cow::Borrowed(self)
     }
 }
+
+impl Prefix<[u8]> for Vec<u8> {
+    fn is_prefix(&self, prefix: &[u8]) -> bool {
+        self.starts_with(prefix)
+    }
+}
+
+impl Label for Box<[u8]> {
+    fn as_label(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self)
+    }
+}
+
+impl Prefix<[u8]> for Box<[u8]> {
+    fn is_prefix(&self, prefix: &[u8]) -> bool {
+        self.starts_with(prefix)
+    }
+}
+
+impl Label for Principal {
+    fn as_label(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.as_slice())
+    }
+}
+
+impl Label for String {
+    fn as_label(&self) -> Cow<[u8]> {
+        Cow::Borrowed(self.as_bytes())
+    }
+}
+
+impl Prefix<str> for String {
+    fn is_prefix(&self, prefix: &str) -> bool {
+        self.as_bytes().starts_with(prefix.as_bytes())
+    }
+}
+
+impl Label for bool {
+    fn as_label(&self) -> Cow<[u8]> {
+        if *self {
+            Cow::Owned(vec![1])
+        } else {
+            Cow::Owned(vec![0])
+        }
+    }
+}
+
+macro_rules! impl_fixed_size {
+    ( $($size:expr),* ) => {
+        $(
+            impl Label for [u8; $size] {
+                #[inline]
+                fn as_label(&self) -> Cow<[u8]> {
+                    Cow::Borrowed(self)
+                }
+            }
+
+            impl Prefix<[u8]> for [u8; $size] {
+                #[inline]
+                fn is_prefix(&self, prefix: &[u8]) -> bool {
+                    self.starts_with(prefix)
+                }
+            }
+        )*
+    }
+}
+
+impl_fixed_size!(
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27, 28, 29, 30, 31, 32
+);
+
+macro_rules! impl_num {
+    ( $($name:ty),* ) => {
+        $(
+            impl Label for $name {
+                fn as_label(&self) -> Cow<[u8]> {
+                    Cow::Owned(self.to_be_bytes().into())
+                }
+            }
+        )*
+    }
+}
+
+impl_num!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);

@@ -2,62 +2,22 @@ use super::{KeyBound, RbTree};
 use crate::{AsHashTree, HashTree};
 use std::convert::AsRef;
 
-fn insert(t: &mut RbTree<Vec<u8>, Vec<u8>>, k: impl AsRef<[u8]>, v: impl AsRef<[u8]>) {
-    t.insert(k.as_ref().to_vec(), v.as_ref().to_vec());
-}
-
-fn get_labels<'a>(ht: &'a HashTree<'a>) -> Vec<&'a [u8]> {
-    fn go<'a>(t: &'a HashTree<'a>, keys: &mut Vec<&'a [u8]>) {
-        match t {
-            HashTree::Labeled(key, _) => {
-                keys.push(key);
-            }
-            HashTree::Fork(lr) => {
-                go(&lr.0, keys);
-                go(&lr.1, keys);
-            }
-            _ => (),
-        }
-    }
-    let mut keys = vec![];
-    go(ht, &mut keys);
-    keys
-}
-
-fn get_leaf_values<'a>(ht: &'a HashTree<'a>) -> Vec<&'a [u8]> {
-    fn go<'a>(t: &'a HashTree<'a>, values: &mut Vec<&'a [u8]>) {
-        match t {
-            HashTree::Leaf(value) => {
-                values.push(value);
-            }
-            HashTree::Fork(lr) => {
-                go(&lr.0, values);
-                go(&lr.1, values);
-            }
-            HashTree::Labeled(_, t) => {
-                go(&*t, values);
-            }
-            _ => (),
-        }
-    }
-    let mut values = vec![];
-    go(ht, &mut values);
-    values
-}
-
 #[test]
 fn test_witness() {
     let mut t = RbTree::<Vec<u8>, Vec<u8>>::new();
+
     for i in 0u64..10 {
         let key = (1 + 2 * i).to_be_bytes();
         let val = (1 + 2 * i).to_le_bytes();
-        insert(&mut t, key, val);
+        t.insert(key.into(), val.into());
         assert_eq!(t.get(&key[..]).map(|v| &v[..]), Some(&val[..]));
     }
 
     for i in 0u64..10 {
         let key = (1 + 2 * i).to_be_bytes();
-        let ht = t.witness(&key[..]);
+        let key = key.as_ref();
+
+        let ht = t.witness(key);
         assert_eq!(
             ht.reconstruct(),
             t.root_hash(),
@@ -66,14 +26,14 @@ fn test_witness() {
             ht
         );
 
-        let ht = t.keys_with_prefix(&key[..]);
+        let ht = t.keys_with_prefix(key);
         assert_eq!(
             ht.reconstruct(),
             t.root_hash(),
             "key: {}, lower bound: {:?}, upper_bound: {:?}, witness {:?}",
             hex::encode(key),
-            t.lower_bound(&key[..]).map(hex::encode),
-            t.right_prefix_neighbor(&key[..]).map(hex::encode),
+            t.lower_bound(key).map(hex::encode),
+            t.right_prefix_neighbor(key).map(hex::encode),
             ht
         );
     }
@@ -145,67 +105,80 @@ fn test_key_bounds() {
     t.insert(vec![3], vec![30]);
 
     assert_eq!(t.lower_bound(&[0u8][..]), None);
-    assert_eq!(t.lower_bound(&[1u8][..]), Some(KeyBound::Exact(&[1u8])));
-    assert_eq!(t.lower_bound(&[2u8][..]), Some(KeyBound::Neighbor(&[1u8])));
-    assert_eq!(t.lower_bound(&[3u8][..]), Some(KeyBound::Exact(&[3u8])));
-    assert_eq!(t.lower_bound(&[4u8][..]), Some(KeyBound::Neighbor(&[3u8])));
+    assert_eq!(t.lower_bound(&[1u8][..]), Some(KeyBound::Exact(&vec![1u8])));
+    assert_eq!(
+        t.lower_bound(&[2u8][..]),
+        Some(KeyBound::Neighbor(&vec![1u8]))
+    );
+    assert_eq!(t.lower_bound(&[3u8][..]), Some(KeyBound::Exact(&vec![3u8])));
+    assert_eq!(
+        t.lower_bound(&[4u8][..]),
+        Some(KeyBound::Neighbor(&vec![3u8]))
+    );
 
-    assert_eq!(t.upper_bound(&[0u8][..]), Some(KeyBound::Neighbor(&[1u8])));
-    assert_eq!(t.upper_bound(&[1u8][..]), Some(KeyBound::Exact(&[1u8])));
-    assert_eq!(t.upper_bound(&[2u8][..]), Some(KeyBound::Neighbor(&[3u8])));
-    assert_eq!(t.upper_bound(&[3u8][..]), Some(KeyBound::Exact(&[3u8])));
+    assert_eq!(
+        t.upper_bound(&[0u8][..]),
+        Some(KeyBound::Neighbor(&vec![1u8]))
+    );
+    assert_eq!(t.upper_bound(&[1u8][..]), Some(KeyBound::Exact(&vec![1u8])));
+    assert_eq!(
+        t.upper_bound(&[2u8][..]),
+        Some(KeyBound::Neighbor(&vec![3u8]))
+    );
+    assert_eq!(t.upper_bound(&[3u8][..]), Some(KeyBound::Exact(&vec![3u8])));
     assert_eq!(t.upper_bound(&[4u8][..]), None);
 }
 
 #[test]
 fn test_prefix_neighbor() {
-    let mut t = RbTree::<Vec<u8>, Vec<u8>>::new();
-    insert(&mut t, b"a/b", vec![0]);
-    insert(&mut t, b"a/b/c", vec![1]);
-    insert(&mut t, b"a/b/d", vec![2]);
-    insert(&mut t, b"a/c/d", vec![3]);
+    let mut t = RbTree::<String, Vec<u8>>::new();
+    t.insert("a/b".into(), vec![0]);
+    t.insert("a/b".into(), vec![0]);
+    t.insert("a/b/c".into(), vec![1]);
+    t.insert("a/b/d".into(), vec![2]);
+    t.insert("a/c/d".into(), vec![3]);
 
     assert_eq!(
-        t.right_prefix_neighbor(b"a/b/c"),
-        Some(KeyBound::Neighbor(&b"a/b/d"[..]))
+        t.right_prefix_neighbor("a/b/c"),
+        Some(KeyBound::Neighbor(&"a/b/d".into()))
     );
     assert_eq!(
-        t.right_prefix_neighbor(b"a/b"),
-        Some(KeyBound::Neighbor(&b"a/c/d"[..]))
+        t.right_prefix_neighbor("a/b"),
+        Some(KeyBound::Neighbor(&"a/c/d".into()))
     );
-    assert_eq!(t.right_prefix_neighbor(b"a/c/d"), None);
-    assert_eq!(t.right_prefix_neighbor(b"a"), None);
+    assert_eq!(t.right_prefix_neighbor("a/c/d"), None);
+    assert_eq!(t.right_prefix_neighbor("a"), None);
 }
 
 #[test]
 fn simple_delete_test() {
-    let mut t = RbTree::<Vec<u8>, Vec<u8>>::new();
-    insert(&mut t, b"x", b"a");
-    insert(&mut t, b"y", b"b");
-    insert(&mut t, b"z", b"c");
+    let mut t = RbTree::<String, String>::new();
+    t.insert("x".into(), "a".into());
+    t.insert("y".into(), "b".into());
+    t.insert("z".into(), "c".into());
 
-    t.delete(b"x");
-    assert_eq!(t.get(b"x"), None);
-    assert_eq!(t.get(b"y").map(|v| &v[..]), Some(&b"b"[..]));
-    assert_eq!(t.get(b"z").map(|v| &v[..]), Some(&b"c"[..]));
+    t.delete("x");
+    assert_eq!(t.get("x"), None);
+    assert_eq!(t.get("y"), Some(&"b".into()));
+    assert_eq!(t.get("z"), Some(&"c".into()));
 
-    t.delete(b"y");
-    assert_eq!(t.get(b"y").map(|v| &v[..]), None);
-    assert_eq!(t.get(b"z").map(|v| &v[..]), Some(&b"c"[..]));
+    t.delete("y");
+    assert_eq!(t.get("y"), None);
+    assert_eq!(t.get("z"), Some(&"c".into()));
 
-    t.delete(b"z");
-    assert_eq!(t.get(b"z").map(|v| &v[..]), None);
+    t.delete("z");
+    assert_eq!(t.get("z"), None);
 }
 
 #[test]
 fn simple_delete_test_2() {
-    let mut t = RbTree::<Vec<u8>, Vec<u8>>::new();
-    insert(&mut t, b"x", b"y");
-    insert(&mut t, b"z", b"w");
+    let mut t = RbTree::<String, String>::new();
+    t.insert("x".into(), "y".into());
+    t.insert("z".into(), "w".into());
 
-    t.delete(b"z");
-    assert_eq!(t.get(b"z"), None);
-    assert_eq!(t.get(b"x").map(|v| &v[..]), Some(&b"y"[..]));
+    t.delete("z");
+    assert_eq!(t.get("z"), None);
+    assert_eq!(t.get("x"), Some(&"y".into()));
 }
 
 #[test]
@@ -217,7 +190,7 @@ fn map_model_test() {
 
     for i in 0..100u64 {
         hm.insert(i.to_be_bytes().to_vec(), i.to_be_bytes().to_vec());
-        insert(&mut rb, i.to_be_bytes(), i.to_be_bytes());
+        rb.insert(i.to_be_bytes().to_vec(), i.to_be_bytes().to_vec());
 
         for k in hm.keys() {
             assert_eq!(hm.get(k), rb.get(k));
@@ -241,12 +214,12 @@ fn map_model_test() {
 
 #[test]
 fn test_nested_witness() {
-    let mut rb: RbTree<Vec<u8>, RbTree<Vec<u8>, Vec<u8>>> = RbTree::new();
+    let mut rb: RbTree<String, RbTree<String, String>> = RbTree::new();
     let mut nested = RbTree::new();
-    nested.insert(b"bottom".to_vec(), b"data".to_vec());
-    rb.insert(b"top".to_vec(), nested);
+    nested.insert("bottom".into(), "data".into());
+    rb.insert("top".into(), nested);
 
-    let ht = rb.nested_witness(&b"top"[..], |v| v.witness(&b"bottom"[..]));
+    let ht = rb.nested_witness("top", |v| v.witness("bottom"));
 
     assert_eq!(ht.reconstruct(), rb.root_hash());
     match ht {
@@ -262,64 +235,61 @@ fn test_nested_witness() {
         other => panic!("expected a labeled tree, got {:?}", other),
     }
 
-    rb.modify(b"top", |m| {
-        m.delete(b"bottom");
+    rb.modify("top", |m| {
+        m.delete("bottom");
     });
-    let ht = rb.nested_witness(&b"top"[..], |v| v.witness(&b"bottom"[..]));
+    let ht = rb.nested_witness("top", |v| v.witness("bottom"));
     assert_eq!(ht.reconstruct(), rb.root_hash());
 }
 
 #[test]
 fn test_witness_key_range() {
-    let mut t = RbTree::<Vec<u8>, Vec<u8>>::new();
-    insert(&mut t, b"b", b"x");
-    insert(&mut t, b"d", b"y");
-    insert(&mut t, b"f", b"z");
+    let mut t = RbTree::<String, String>::new();
+    t.insert("b".into(), "x".into());
+    t.insert("d".into(), "y".into());
+    t.insert("f".into(), "z".into());
 
-    assert_eq!(get_labels(&t.key_range(b"a", b"a")), vec![b"b"]);
-    assert_eq!(get_labels(&t.key_range(b"a", b"b")), vec![b"b"]);
-    assert_eq!(get_labels(&t.key_range(b"a", b"c")), vec![b"b", b"d"]);
-    assert_eq!(get_labels(&t.key_range(b"a", b"f")), vec![b"b", b"d", b"f"]);
-    assert_eq!(get_labels(&t.key_range(b"a", b"z")), vec![b"b", b"d", b"f"]);
+    assert_eq!(t.key_range("a", "a").get_labels(), vec![b"b"]);
+    assert_eq!(t.key_range("a", "b").get_labels(), vec![b"b"]);
+    assert_eq!(t.key_range("a", "c").get_labels(), vec![b"b", b"d"]);
+    assert_eq!(t.key_range("a", "f").get_labels(), vec![b"b", b"d", b"f"]);
+    assert_eq!(t.key_range("a", "z").get_labels(), vec![b"b", b"d", b"f"]);
 
-    assert_eq!(get_labels(&t.key_range(b"b", b"b")), vec![b"b"]);
-    assert_eq!(get_labels(&t.key_range(b"b", b"c")), vec![b"b", b"d"]);
-    assert_eq!(get_labels(&t.key_range(b"b", b"f")), vec![b"b", b"d", b"f"]);
-    assert_eq!(get_labels(&t.key_range(b"b", b"z")), vec![b"b", b"d", b"f"]);
+    assert_eq!(t.key_range("b", "b").get_labels(), vec![b"b"]);
+    assert_eq!(t.key_range("b", "c").get_labels(), vec![b"b", b"d"]);
+    assert_eq!(t.key_range("b", "f").get_labels(), vec![b"b", b"d", b"f"]);
+    assert_eq!(t.key_range("b", "z").get_labels(), vec![b"b", b"d", b"f"]);
 
-    assert_eq!(get_labels(&t.key_range(b"d", b"e")), vec![b"d", b"f"]);
-    assert_eq!(get_labels(&t.key_range(b"d", b"f")), vec![b"d", b"f"]);
-    assert_eq!(get_labels(&t.key_range(b"d", b"z")), vec![b"d", b"f"]);
-    assert_eq!(get_labels(&t.key_range(b"y", b"z")), vec![b"f"]);
+    assert_eq!(t.key_range("d", "e").get_labels(), vec![b"d", b"f"]);
+    assert_eq!(t.key_range("d", "f").get_labels(), vec![b"d", b"f"]);
+    assert_eq!(t.key_range("d", "z").get_labels(), vec![b"d", b"f"]);
+    assert_eq!(t.key_range("y", "z").get_labels(), vec![b"f"]);
 
-    assert!(get_leaf_values(&t.key_range(b"a", b"z")).is_empty());
+    assert!(t.key_range("a", "z").get_leaf_values().is_empty());
 }
 
 #[test]
 fn test_witness_value_range() {
-    let mut t = RbTree::<Vec<u8>, Vec<u8>>::new();
-    insert(&mut t, b"b", b"x");
-    insert(&mut t, b"d", b"y");
-    insert(&mut t, b"f", b"z");
+    let mut t = RbTree::<String, String>::new();
+    t.insert("b".into(), "x".into());
+    t.insert("d".into(), "y".into());
+    t.insert("f".into(), "z".into());
 
-    assert_eq!(get_labels(&t.value_range(b"a", b"a")), vec![b"b"]);
-    assert!(get_leaf_values(&t.value_range(b"a", b"a")).is_empty());
+    assert_eq!(t.key_range("a", "a").get_labels(), vec![b"b"]);
+    assert!(t.value_range("a", "a").get_leaf_values().is_empty());
 
-    assert_eq!(get_labels(&t.value_range(b"a", b"b")), vec![b"b"]);
-    assert_eq!(get_leaf_values(&t.value_range(b"a", b"b")), vec![b"x"]);
+    assert_eq!(t.value_range("a", "b").get_labels(), vec![b"b"]);
+    assert_eq!(t.value_range("a", "b").get_leaf_values(), vec![b"x"]);
 
-    assert_eq!(get_labels(&t.value_range(b"f", b"z")), vec![b"f"]);
-    assert_eq!(get_leaf_values(&t.value_range(b"f", b"z")), vec![b"z"]);
+    assert_eq!(t.value_range("f", "z").get_labels(), vec![b"f"]);
+    assert_eq!(t.value_range("f", "z").get_leaf_values(), vec![b"z"]);
 
-    assert_eq!(get_labels(&t.value_range(b"g", b"z")), vec![b"f"]);
-    assert!(get_leaf_values(&t.value_range(b"g", b"z")).is_empty());
+    assert_eq!(t.value_range("g", "z").get_labels(), vec![b"f"]);
+    assert!(t.value_range("g", "z").get_leaf_values().is_empty());
 
+    assert_eq!(t.value_range("a", "z").get_labels(), vec![b"b", b"d", b"f"]);
     assert_eq!(
-        get_labels(&t.value_range(b"a", b"z")),
-        vec![b"b", b"d", b"f"]
-    );
-    assert_eq!(
-        get_leaf_values(&t.value_range(b"a", b"z")),
+        t.value_range("a", "z").get_leaf_values(),
         vec![b"x", b"y", b"z"]
     );
 }

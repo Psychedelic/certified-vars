@@ -17,7 +17,7 @@ impl<'a> ForkInner<'a> {
     }
 
     pub fn right(&self) -> &HashTree<'a> {
-        &self.0
+        &self.1
     }
 }
 
