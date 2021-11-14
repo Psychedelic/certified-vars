@@ -369,6 +369,61 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         unsafe { go(self.root, key, f) }
     }
 
+    /// Modify the maximum node with the given prefix.
+    pub fn modify_max_with_prefix<'a, P: ?Sized, T>(
+        &mut self,
+        prefix: &P,
+        f: impl FnOnce(&'a K, &'a mut V) -> T,
+    ) -> Option<T>
+    where
+        K: Prefix<P>,
+        P: Ord,
+    {
+        unsafe fn go<
+            'a,
+            K: Label + 'static,
+            V: AsHashTree + 'static,
+            P: ?Sized,
+            T,
+            F: FnOnce(&'a K, &'a mut V) -> T,
+        >(
+            mut h: *mut Node<K, V>,
+            prefix: &P,
+            f: F,
+        ) -> (Option<T>, Option<F>)
+        where
+            K: Prefix<P>,
+            P: Ord,
+        {
+            if h.is_null() {
+                return (None, Some(f));
+            }
+
+            let node_key = &(*h).key;
+            let key_prefix = node_key.borrow();
+
+            let res = match key_prefix.cmp(prefix) {
+                Greater | Equal if node_key.is_prefix(prefix) => match go((*h).right, prefix, f) {
+                    (None, Some(f)) => {
+                        let ret = f(node_key, &mut (*h).value);
+                        (Some(ret), None)
+                    }
+                    ret => ret,
+                },
+                Greater => go((*h).left, prefix, f),
+                Less | Equal => go((*h).right, prefix, f),
+            };
+
+            if res.0.is_some() {
+                (*h).subtree_hash = Node::subtree_hash(h);
+            }
+
+            res
+        }
+
+        unsafe { go(self.root, prefix, f).0 }
+    }
+
     fn range_witness<'a>(
         &'a self,
         left: Option<KeyBound<'a, K>>,

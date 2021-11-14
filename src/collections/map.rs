@@ -9,13 +9,14 @@ use candid::CandidType;
 use serde::de::{MapAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Borrow;
 use std::fmt::{self, Debug, Formatter};
 use std::iter::FromIterator;
 use std::marker::PhantomData;
 
 #[derive(Default)]
 pub struct Map<K: 'static + Label, V: AsHashTree + 'static> {
-    inner: RbTree<K, V>,
+    pub(crate) inner: RbTree<K, V>,
 }
 
 impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
@@ -55,13 +56,21 @@ impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
     /// Remove the value associated with the given key from the map, returns the
     /// previous value associated with the key.
     #[inline]
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.inner.delete(key).map(|(_, v)| v)
     }
 
     /// Remove an entry from the map and return the key and value.
     #[inline]
-    pub fn remove_entry(&mut self, key: &K) -> Option<(K, V)> {
+    pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.inner.delete(key)
     }
 
@@ -72,13 +81,21 @@ impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
 
     /// Returns a mutable reference to the value corresponding to the key.
     #[inline]
-    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.inner.modify(key, |v| v)
     }
 
     /// Return the value associated with the given key.
     #[inline]
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.inner.get(key)
     }
 
@@ -90,7 +107,11 @@ impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
 
     /// Create a HashTree witness for the value associated with given key.
     #[inline]
-    pub fn witness(&self, key: &K) -> HashTree {
+    pub fn witness<Q: ?Sized>(&self, key: &Q) -> HashTree
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.inner.witness(key)
     }
 
@@ -104,7 +125,12 @@ impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
     /// Returns a witness for the key-value pairs in the specified range.
     /// The resulting tree contains both keys and values.
     #[inline]
-    pub fn witness_value_range(&self, first: &K, last: &K) -> HashTree<'_> {
+    pub fn witness_value_range<Q1: ?Sized, Q2: ?Sized>(&self, first: &K, last: &K) -> HashTree<'_>
+    where
+        K: Borrow<Q1> + Borrow<Q2>,
+        Q1: Ord,
+        Q2: Ord,
+    {
         self.inner.value_range(first, last)
     }
 
@@ -133,8 +159,19 @@ impl<K: 'static + Label, V: AsHashTree> Map<K, Seq<V>> {
     }
 
     #[inline]
-    pub fn len_deep(&mut self, key: &K) -> usize {
+    pub fn len_deep<Q: ?Sized>(&mut self, key: &Q) -> usize
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         self.inner.get(key).map(|seq| seq.len()).unwrap_or(0)
+    }
+}
+
+impl<K: 'static + Label, V: 'static + AsHashTree> AsRef<RbTree<K, V>> for Map<K, V> {
+    #[inline]
+    fn as_ref(&self) -> &RbTree<K, V> {
+        &self.inner
     }
 }
 
@@ -284,10 +321,10 @@ mod tests {
         assert_eq!(map.insert("C".into(), 7), Some(5));
         assert_eq!(map.insert("A".into(), 8), Some(1));
 
-        assert_eq!(map.get(&"A".into()), Some(&8));
-        assert_eq!(map.get(&"B".into()), Some(&6));
-        assert_eq!(map.get(&"C".into()), Some(&7));
-        assert_eq!(map.get(&"D".into()), None);
+        assert_eq!(map.get("A"), Some(&8));
+        assert_eq!(map.get("B"), Some(&6));
+        assert_eq!(map.get("C"), Some(&7));
+        assert_eq!(map.get("D"), None);
     }
 
     #[test]

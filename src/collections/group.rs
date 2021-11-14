@@ -310,7 +310,7 @@ fn yyy() {
     let t3 = group.witness().full::<StringToI8Map>().build();
     let t4 = group
         .witness()
-        .partial(|map: &StringToI8Map| map.witness(&"X".into()))
+        .partial(|map: &StringToI8Map| map.witness("X"))
         .build();
 
     assert_eq!(t1.reconstruct(), t2.reconstruct());
