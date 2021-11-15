@@ -1,5 +1,5 @@
 use crate::collections::seq::Seq;
-use crate::label::Label;
+use crate::label::{Label, Prefix};
 use crate::rbtree::entry::Entry;
 use crate::rbtree::iterator::RbTreeIterator;
 use crate::rbtree::RbTree;
@@ -132,6 +132,30 @@ impl<K: 'static + Label, V: AsHashTree + 'static> Map<K, V> {
         Q2: Ord,
     {
         self.inner.value_range(first, last)
+    }
+
+    /// Returns a witness for the keys in the specified range.
+    /// The resulting tree only contains the keys, and the values are replaced with
+    /// "Pruned" nodes.
+    #[inline]
+    pub fn witness_key_range<Q1: ?Sized, Q2: ?Sized>(&self, first: &K, last: &K) -> HashTree<'_>
+    where
+        K: Borrow<Q1> + Borrow<Q2>,
+        Q1: Ord,
+        Q2: Ord,
+    {
+        self.inner.key_range(first, last)
+    }
+
+    /// Returns a witness for the keys with the given prefix, this replaces the values with
+    /// "Pruned" nodes.
+    #[inline]
+    pub fn witness_keys_with_prefix<P: ?Sized>(&self, prefix: &P) -> HashTree<'_>
+    where
+        K: Prefix<P>,
+        P: Ord,
+    {
+        self.inner.keys_with_prefix(prefix)
     }
 
     /// Return the underlying [`RbTree`] for this map.

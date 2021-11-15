@@ -1,5 +1,5 @@
 use crate::label::{Label, Prefix};
-use crate::{AsHashTree, Map, Seq};
+use crate::{AsHashTree, Hash, HashTree, Map, Seq};
 use candid::CandidType;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
@@ -64,6 +64,67 @@ impl<K: Label + Ord + 'static, V: AsHashTree + 'static, const S: usize> Paged<K,
             value.append(item.take().unwrap());
             tree.insert(key, value);
         }
+    }
+
+    pub fn get_last_page_number(&self, key: &K) -> Option<usize> {
+        self.data
+            .inner
+            .max_entry_with_prefix(key)
+            .map(|(k, _)| k.page as usize)
+    }
+
+    // TODO(qti3e) Remove the Clone.
+    pub fn witness_last_page_number(&self, key: &K) -> HashTree<'_>
+    where
+        K: Clone,
+    {
+        let page = self
+            .data
+            .inner
+            .max_entry_with_prefix(key)
+            .map(|(k, _)| k.page + 1)
+            .unwrap_or(0);
+        let key = PagedKey {
+            key: key.clone(),
+            page,
+        };
+        self.data.witness(&key)
+    }
+
+    // TODO(qti3e) Remove the Clone in future.
+    pub fn get(&self, key: &K, page: usize) -> Option<&Seq<V>>
+    where
+        K: Clone,
+    {
+        let key = PagedKey {
+            key: key.clone(),
+            page: page as u32,
+        };
+        self.data.get(&key)
+    }
+
+    // TODO(qti3e) Remove the Clone in future.
+    pub fn witness(&self, key: &K, page: usize) -> HashTree<'_>
+    where
+        K: Clone,
+    {
+        let key = PagedKey {
+            key: key.clone(),
+            page: page as u32,
+        };
+        self.data.witness(&key)
+    }
+}
+
+impl<K: Label + Ord + 'static, V: AsHashTree + 'static, const S: usize> AsHashTree
+    for Paged<K, V, S>
+{
+    fn root_hash(&self) -> Hash {
+        self.data.root_hash()
+    }
+
+    fn as_hash_tree(&self) -> HashTree<'_> {
+        self.data.as_hash_tree()
     }
 }
 

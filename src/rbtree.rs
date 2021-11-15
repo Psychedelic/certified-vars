@@ -424,6 +424,36 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
         unsafe { go(self.root, prefix, f).0 }
     }
 
+    pub fn max_entry_with_prefix<P: ?Sized>(&self, prefix: &P) -> Option<(&K, &V)>
+    where
+        K: Prefix<P>,
+        P: Ord,
+    {
+        unsafe fn go<'a, K: 'static + Label, V, P: ?Sized>(
+            n: *mut Node<K, V>,
+            prefix: &P,
+        ) -> Option<(&'a K, &'a V)>
+        where
+            K: Prefix<P>,
+            P: Ord,
+        {
+            if n.is_null() {
+                return None;
+            }
+
+            let node_key = &(*n).key;
+            let key_prefix = node_key.borrow();
+            match key_prefix.cmp(prefix) {
+                Greater | Equal if node_key.is_prefix(prefix) => {
+                    go((*n).right, prefix).or(Some((node_key, &(*n).value)))
+                }
+                Greater => go((*n).left, prefix),
+                Less | Equal => go((*n).right, prefix),
+            }
+        }
+        unsafe { go(self.root, prefix) }
+    }
+
     fn range_witness<'a>(
         &'a self,
         left: Option<KeyBound<'a, K>>,
