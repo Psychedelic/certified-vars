@@ -91,16 +91,10 @@ impl<K: Label + Ord + 'static, V: AsHashTree + 'static, const S: usize> Paged<K,
         self.data.witness(&key)
     }
 
-    // TODO(qti3e) Remove the Clone in future.
-    pub fn get(&self, key: &K, page: usize) -> Option<&Seq<V>>
-    where
-        K: Clone,
-    {
-        let key = PagedKey {
-            key: key.clone(),
-            page: page as u32,
-        };
-        self.data.get(&key)
+    pub fn get(&self, key: &K, page: usize) -> Option<&Seq<V>> {
+        let page = page as u32;
+        let key = (key, page);
+        self.data.inner.get_with(|k| key.cmp(&(&k.key, k.page)))
     }
 
     // TODO(qti3e) Remove the Clone in future.
@@ -179,5 +173,34 @@ mod tests {
         );
 
         assert_eq!(paged.data.inner.modify_max_with_prefix(&6, |k, _| k), None);
+    }
+
+    #[test]
+    fn get() {
+        let mut paged = Paged::<i32, i32, 3>::new();
+
+        // For each key from 0 to 4, insert 10 items, which is 3 full page + one last page
+        // with one item.
+        // 0: [0 5 10] [15 20 25] [30 35 40] [45] -> 15p + 5i + 0
+        // 1: [1 6 11] [16 21 26] [31 36 41] [46] -> 15p + 5i + 1
+        // 2: [2 7 12] [17 22 27] [32 37 42] [47] -> 15p + 5i + 2
+        // 3: [3 8 13] [18 23 28] [33 38 43] [48] -> 15p + 5i + 3
+        // 4: [4 9 14] [19 24 29] [34 39 44] [49] -> 15p + 5i + 4
+        for i in 0..50 {
+            paged.insert(i % 5, i);
+        }
+
+        for k in 0..5 {
+            for p in 0..3 {
+                let seq = (0..3).map(|i| 15 * p + 5 * i + k).collect::<Seq<_>>();
+                assert_eq!(paged.get(&k, p as usize), Some(&seq));
+            }
+        }
+
+        for k in 0..5 {
+            let seq = vec![45 + k].into_iter().collect::<Seq<_>>();
+            assert_eq!(paged.get(&k, 3), Some(&seq));
+            assert_eq!(paged.get(&k, 4), None);
+        }
     }
 }

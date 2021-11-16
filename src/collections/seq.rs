@@ -134,12 +134,12 @@ impl<T: AsHashTree> Seq<T> {
 impl<T: AsHashTree> AsHashTree for Seq<T> {
     #[inline]
     fn root_hash(&self) -> Hash {
-        self.hash.root_hash()
+        self.hash
     }
 
     #[inline]
     fn as_hash_tree(&self) -> HashTree<'_> {
-        self.hash.as_hash_tree()
+        HashTree::Pruned(self.hash)
     }
 }
 

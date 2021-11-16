@@ -316,6 +316,21 @@ impl<K: 'static + Label, V: AsHashTree + 'static> RbTree<K, V> {
     }
 
     #[inline]
+    pub fn get_with(&self, cmp: impl Fn(&K) -> Ordering) -> Option<&V> {
+        unsafe {
+            let mut root = self.root;
+            while !root.is_null() {
+                match cmp(&(*root).key) {
+                    Equal => return Some(&(*root).value),
+                    Less => root = (*root).left,
+                    Greater => root = (*root).right,
+                }
+            }
+            None
+        }
+    }
+
+    #[inline]
     unsafe fn get_node(&self, key: &K) -> *mut Node<K, V> {
         let mut root = self.root;
         while !root.is_null() {
