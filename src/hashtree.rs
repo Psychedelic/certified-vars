@@ -80,8 +80,9 @@ impl<'a> HashTree<'a> {
     pub fn get_labels<'b: 'a>(&'b self) -> Vec<&'b [u8]> {
         fn go<'a>(keys: &mut Vec<&'a [u8]>, tree: &'a HashTree<'a>) {
             match tree {
-                HashTree::Labeled(key, _) => {
+                HashTree::Labeled(key, value) => {
                     keys.push(key);
+                    go(keys, value);
                 }
                 HashTree::Fork(lr) => {
                     go(keys, lr.left());

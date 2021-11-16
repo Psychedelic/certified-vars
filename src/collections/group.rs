@@ -254,68 +254,138 @@ impl AsHashTree for Group {
     }
 }
 
-#[test]
-fn xxx() {
+#[cfg(test)]
+mod tests {
+    use super::builder::GroupBuilder;
+    use super::*;
     use crate::Map;
-    let mut map = Map::<String, i8>::new();
-    map.insert("X".to_string(), 17);
+    use candid::Principal;
 
-    println!("Hash : {}", hex::encode(map.root_hash()));
+    #[test]
+    fn dynamic_box() {
+        let mut map = Map::<String, i8>::new();
+        map.insert("X".to_string(), 17);
+        let hash = map.root_hash();
+        // Now put it in a dynamic box.
+        let data: Box<dyn GroupLeaf> = Box::new(map);
+        let as_map = data.downcast_ref::<Map<String, i8>>().unwrap();
+        assert_eq!(hash, as_map.root_hash());
+    }
 
-    let data: Box<dyn GroupLeaf> = Box::new(map);
+    #[test]
+    fn ray() {
+        type S2S = Map<String, String>;
+        let mut map = S2S::new();
+        map.insert("X".to_string(), "x".to_string());
+        map.insert("Y".to_string(), "y".to_string());
 
-    let as_map = data.downcast_ref::<Map<String, i8>>();
-    println!("As map: {:?}", as_map);
-}
+        let mut group = Group {
+            root: GroupNode {
+                id: 0,
+                data: GroupNodeInner::Fork(
+                    Box::new(GroupNode {
+                        id: 0,
+                        data: GroupNodeInner::Labeled(
+                            "A".into(),
+                            Box::new(GroupNode {
+                                id: 0,
+                                data: GroupNodeInner::Leaf(TypeId::of::<S2S>()),
+                            }),
+                        ),
+                    }),
+                    Box::new(GroupNode {
+                        id: 0,
+                        data: GroupNodeInner::Leaf(TypeId::of::<String>()),
+                    }),
+                ),
+            },
+            data: Default::default(),
+            dependencies: Default::default(),
+        };
 
-#[test]
-fn yyy() {
-    use crate::Map;
-    type StringToI8Map = Map<String, i8>;
-    let mut map = StringToI8Map::new();
-    map.insert("X".to_string(), 17);
+        group.data.insert(TypeId::of::<String>(), Box::new("Cap"));
+        group.data.insert(TypeId::of::<S2S>(), Box::new(map));
+        group.init();
 
-    let mut group = Group {
-        root: GroupNode {
-            id: 0,
-            data: GroupNodeInner::Fork(
-                Box::new(GroupNode {
-                    id: 0,
-                    data: GroupNodeInner::Labeled(
-                        "A".into(),
-                        Box::new(GroupNode {
-                            id: 0,
-                            data: GroupNodeInner::Leaf(TypeId::of::<StringToI8Map>()),
-                        }),
-                    ),
-                }),
-                Box::new(GroupNode {
-                    id: 0,
-                    data: GroupNodeInner::Leaf(TypeId::of::<i8>()),
-                }),
-            ),
-        },
-        data: Default::default(),
-        dependencies: Default::default(),
-    };
+        let t1 = group.witness().build();
+        let t2 = group.witness().full::<String>().build();
+        let t3 = group.witness().full::<S2S>().build();
+        let t4 = group
+            .witness()
+            .partial(|map: &S2S| map.witness("X"))
+            .build();
 
-    group.data.insert(TypeId::of::<i8>(), Box::new(17));
-    group
-        .data
-        .insert(TypeId::of::<StringToI8Map>(), Box::new(map));
-    group.init();
+        assert_eq!(t1.reconstruct(), t2.reconstruct());
+        assert_eq!(t1.reconstruct(), t3.reconstruct());
+        assert_eq!(t1.reconstruct(), t4.reconstruct());
 
-    let t1 = group.witness().build();
-    let t2 = group.witness().full::<i8>().build();
-    let t3 = group.witness().full::<StringToI8Map>().build();
-    let t4 = group
-        .witness()
-        .partial(|map: &StringToI8Map| map.witness("X"))
-        .build();
+        assert_eq!(t1.get_labels(), Vec::<&[u8]>::new());
+        assert_eq!(t2.get_labels(), Vec::<&[u8]>::new());
+        assert_eq!(t3.get_labels(), vec![b"A", b"X", b"Y"]);
+        assert_eq!(t4.get_labels(), vec![b"A", b"X"]);
 
-    assert_eq!(t1.reconstruct(), t2.reconstruct());
-    assert_eq!(t1.reconstruct(), t3.reconstruct());
-    assert_eq!(t1.reconstruct(), t4.reconstruct());
+        assert_eq!(t1.get_leaf_values(), Vec::<&[u8]>::new());
+        assert_eq!(t2.get_leaf_values(), vec![b"Cap"]);
+        assert_eq!(t3.get_leaf_values(), vec![b"x", b"y"]);
+        assert_eq!(t4.get_leaf_values(), vec![b"x"]);
+    }
 
-    println!("{:#?}", t4);
+    #[test]
+    fn builder() {
+        type Ledger = Map<Principal, u64>;
+        struct Name(String);
+        struct Owner(String);
+        struct Url(String);
+
+        impl AsHashTree for Name {
+            fn as_hash_tree(&self) -> HashTree<'_> {
+                self.0.as_hash_tree()
+            }
+        }
+
+        impl AsHashTree for Owner {
+            fn as_hash_tree(&self) -> HashTree<'_> {
+                self.0.as_hash_tree()
+            }
+        }
+
+        impl AsHashTree for Url {
+            fn as_hash_tree(&self) -> HashTree<'_> {
+                self.0.as_hash_tree()
+            }
+        }
+
+        let mut group = GroupBuilder::new()
+            .insert(["ledger"], Ledger::new())
+            .insert(["meta", "name"], Name("XTC".to_string()))
+            .insert(["meta", "owner"], Owner("Psychedelic".to_string()))
+            .insert(["canister", "url"], Url("https://github.com/x".to_string()))
+            .build();
+
+        {
+            let ledger = group.get_mut::<Ledger>();
+            ledger.insert(Principal::from_slice(&[65]), 100);
+        }
+
+        let t1 = group.witness().full::<Ledger>().build();
+        let t2 = group.witness().full::<Name>().build();
+        let t3 = group.witness().full::<Owner>().build();
+        let t4 = group.witness().full::<Name>().full::<Owner>().build();
+        let t5 = group.witness().full::<Name>().full::<Url>().build();
+
+        assert_eq!(group.root_hash(), t1.reconstruct());
+        assert_eq!(t1.reconstruct(), t2.reconstruct());
+        assert_eq!(t2.reconstruct(), t3.reconstruct());
+        assert_eq!(t3.reconstruct(), t4.reconstruct());
+        assert_eq!(t4.reconstruct(), t5.reconstruct());
+
+        assert_eq!(t1.get_labels(), vec![b"ledger" as &[u8], b"A"]);
+        assert_eq!(t2.get_labels(), vec![b"meta" as &[u8], b"name"]);
+        assert_eq!(t3.get_labels(), vec![b"meta" as &[u8], b"owner"]);
+        assert_eq!(t4.get_labels(), vec![b"meta" as &[u8], b"name", b"owner"]);
+        assert_eq!(
+            t5.get_labels(),
+            vec![b"canister" as &[u8], b"url", b"meta", b"name"]
+        );
+    }
 }
