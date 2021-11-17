@@ -2,8 +2,15 @@
 name = "certified-vars"
 version = "0.1.0"
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Certified variable friendly data structures for the Internet Computer."
+authors = ["Parsa Ghadimi <parsa@fleek.co>"]
+license = "Apache-2.0"
+repository = "https://github.com/Psychedelic/certified-vars"
+homepage = "https://docs.rs/certified-vars"
+documentation = "https://docs.rs/certified-vars"
+categories = ["data-structures"]
+keywords = ["internet-computer", "canister", "cdk", "fleek"]
+include = ["src", "Cargo.toml", "README.md"]
 
 [dependencies]
 sha2 = "0.9.8"
