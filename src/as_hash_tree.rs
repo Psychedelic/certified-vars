@@ -2,6 +2,9 @@ use crate::hashtree::leaf_hash;
 use crate::{Hash, HashTree};
 use candid::{Nat, Principal};
 use std::borrow::Cow;
+use std::ptr::NonNull;
+use std::rc::Rc;
+use std::sync::Arc;
 
 /// Defines any type that can be converted to a [`HashTree`].
 ///
@@ -107,6 +110,66 @@ impl AsHashTree for Nat {
     #[inline]
     fn as_hash_tree(&self) -> HashTree<'_> {
         HashTree::Leaf(Cow::Owned(self.0.to_bytes_be()))
+    }
+}
+
+impl<T> AsHashTree for Box<T>
+where
+    T: AsHashTree,
+{
+    #[inline]
+    fn root_hash(&self) -> Hash {
+        self.as_ref().root_hash()
+    }
+
+    #[inline]
+    fn as_hash_tree(&self) -> HashTree<'_> {
+        self.as_ref().as_hash_tree()
+    }
+}
+
+impl<T> AsHashTree for Rc<T>
+where
+    T: AsHashTree,
+{
+    #[inline]
+    fn root_hash(&self) -> Hash {
+        self.as_ref().root_hash()
+    }
+
+    #[inline]
+    fn as_hash_tree(&self) -> HashTree<'_> {
+        self.as_ref().as_hash_tree()
+    }
+}
+
+impl<T> AsHashTree for Arc<T>
+where
+    T: AsHashTree,
+{
+    #[inline]
+    fn root_hash(&self) -> Hash {
+        self.as_ref().root_hash()
+    }
+
+    #[inline]
+    fn as_hash_tree(&self) -> HashTree<'_> {
+        self.as_ref().as_hash_tree()
+    }
+}
+
+impl<T> AsHashTree for NonNull<T>
+where
+    T: AsHashTree,
+{
+    #[inline]
+    fn root_hash(&self) -> Hash {
+        unsafe { self.as_ref().root_hash() }
+    }
+
+    #[inline]
+    fn as_hash_tree(&self) -> HashTree<'_> {
+        unsafe { self.as_ref().as_hash_tree() }
     }
 }
 

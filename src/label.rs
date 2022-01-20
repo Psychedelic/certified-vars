@@ -1,5 +1,8 @@
 use candid::Principal;
 use std::borrow::{Borrow, Cow};
+use std::ptr::NonNull;
+use std::rc::Rc;
+use std::sync::Arc;
 
 /// Any value that can be used as a label in the [`HashTree`] and can be a key
 /// in the [`RbTree`].
@@ -81,6 +84,46 @@ impl Label for bool {
         } else {
             Cow::Owned(vec![0])
         }
+    }
+}
+
+impl<T> Label for Box<T>
+where
+    T: Label,
+{
+    #[inline]
+    fn as_label(&self) -> Cow<[u8]> {
+        self.as_ref().as_label()
+    }
+}
+
+impl<T> Label for Rc<T>
+where
+    T: Label,
+{
+    #[inline]
+    fn as_label(&self) -> Cow<[u8]> {
+        self.as_ref().as_label()
+    }
+}
+
+impl<T> Label for Arc<T>
+where
+    T: Label,
+{
+    #[inline]
+    fn as_label(&self) -> Cow<[u8]> {
+        self.as_ref().as_label()
+    }
+}
+
+impl<T> Label for NonNull<T>
+where
+    T: Label,
+{
+    #[inline]
+    fn as_label(&self) -> Cow<[u8]> {
+        unsafe { self.as_ref().as_label() }
     }
 }
 
