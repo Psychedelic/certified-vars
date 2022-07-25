@@ -1,6 +1,6 @@
 [package]
 name = "certified-vars"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2018"
 description = "Certified variable friendly data structures for the Internet Computer."
 authors = ["Parsa Ghadimi <parsa@fleek.co>"]
