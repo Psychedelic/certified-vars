@@ -2,7 +2,7 @@
 name = "certified-vars"
 version = "0.1.3"
 edition = "2018"
-description = "Certified, variable friendly data structures for the Internet Computer."
+description = "Certified variable friendly data structures for the Internet Computer."
 authors = ["Parsa Ghadimi <parsa@fleek.co>"]
 license = "Apache-2.0"
 repository = "https://github.com/Psychedelic/certified-vars"
